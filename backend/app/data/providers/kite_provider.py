@@ -23,16 +23,16 @@ class KiteProvider(DataProvider):
     def get_tickers(self):
         return sorted(DEFAULT_TICKERS)
 
-    def get_history(self, ticker, days=365):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None):
         if not self.is_available():
             return None
         try:
             token = get_instrument_token(self.kite, ticker)
             if not token:
                 return None
-            to_date = datetime.now()
-            from_date = to_date - timedelta(days=days)
-            candles = self.kite.historical_data(token, from_date, to_date, interval="day")
+            range_end = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.now()
+            range_start = datetime.strptime(from_date, "%Y-%m-%d") if from_date else range_end - timedelta(days=days)
+            candles = self.kite.historical_data(token, range_start, range_end, interval="day")
         except Exception:
             return None
 

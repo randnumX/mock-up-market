@@ -21,11 +21,24 @@ class MongoProvider(DataProvider):
         except Exception:
             return []
 
-    def get_history(self, ticker, days=365):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None):
         if not self.is_available():
             return None
+
+        query = {"scripName": ticker}
+        if from_date or to_date:
+            # priceDate is stored as an ISO "YYYY-MM-DD" string everywhere it's
+            # written (kite_ingest, fetch_bse_data), so lexicographic range
+            # comparison is exact - no date parsing needed.
+            date_filter = {}
+            if from_date:
+                date_filter["$gte"] = from_date
+            if to_date:
+                date_filter["$lte"] = to_date
+            query["priceDate"] = date_filter
+
         try:
-            records = list(self.db[Config.COLLECTION_HISTORICAL].find({"scripName": ticker}))
+            records = list(self.db[Config.COLLECTION_HISTORICAL].find(query))
         except Exception:
             return None
         if not records:

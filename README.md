@@ -56,6 +56,21 @@ Without steps 1-2, the app runs exactly as before on MongoDB / synthetic data �
 
 For headless/cron use there are CLI equivalents: `python scripts/kite_login.py` and `python scripts/fetch_data.py`.
 
+## Real Market Data (BSE, no broker account needed)
+
+`backend/scripts/fetch_bse_data.py` pulls daily history straight from BSE's public (undocumented) `StockReachGraph` endpoint into MongoDB — no Kite subscription required. Ticker → BSE scrip code comes from `backend/Equity.csv` (the official active-equity list exported from [bseindia.com/corporates/List_Scrips.aspx](https://www.bseindia.com/corporates/List_Scrips.aspx), T+1 segment).
+
+```bash
+cd backend && python scripts/fetch_bse_data.py                # all ~5000 active equities, resumable
+cd backend && python scripts/fetch_bse_data.py SBIN RELIANCE   # just these tickers
+cd backend && python scripts/fetch_bse_data.py --limit 50      # first 50 only, for testing
+cd backend && python scripts/fetch_bse_data.py --force         # re-fetch even already-loaded tickers
+```
+
+Interrupting and re-running is safe — it skips tickers already in Mongo unless `--force` is passed. **`flag=12M` (~1 year of daily bars) is the real ceiling for this endpoint** — anything above that (`24M`, `2Y`, `5Y`, ...) silently returns intraday minute ticks for *today* instead of more history, confirmed by direct testing; the script enforces this and refuses larger flags. For more than ~1 year of history, use the Kite Connect path above instead.
+
+Caveat: this is an undocumented BSE endpoint accessed via a spoofed browser User-Agent - it works today but could change or be rate-limited/blocked without notice. Fine for local development and demos; prefer Kite Connect for anything long-term.
+
 ## Live Trading
 
 The **Live Trading** tab runs the same `Strategy` classes used for backtesting against a live price feed, one tick at a time, on an in-process scheduler (polls every `LIVE_POLL_INTERVAL_SECONDS`, default 30s). Requires MongoDB — a session's whole point is to keep running unattended, so its state (cash, positions, trade history, rolling indicator bars) is persisted after every tick and survives a backend restart.
@@ -111,8 +126,8 @@ mock-up-market/
 | GET | `/api/health` | Server status + per-provider availability |
 | GET | `/api/tickers` | Available stock tickers, merged across active providers |
 | GET | `/api/strategies` | List of available strategies with descriptions |
-| POST | `/api/backtest` | Run a backtest (body: `{ticker, capital, strategy, source?}`) |
-| GET | `/api/backtest/stream` | Same backtest as an SSE stream (query params) - one `tick` event per bar, then a `done` event with the identical result shape |
+| POST | `/api/backtest` | Run a backtest (body: `{ticker, capital, strategy, source?, from_date?, to_date?}`) |
+| GET | `/api/backtest/stream` | Same backtest as an SSE stream (query params, same fields) - one `tick` event per bar, then a `done` event with the identical result shape |
 | GET | `/api/kite/status` | Whether Kite Connect is configured/connected |
 | GET | `/api/kite/login-url` | Zerodha hosted login URL |
 | GET | `/api/kite/callback` | OAuth redirect target (exchanges request_token) |

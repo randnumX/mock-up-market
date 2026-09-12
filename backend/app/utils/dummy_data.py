@@ -27,7 +27,7 @@ def get_dummy_tickers():
     return sorted(STOCK_PROFILES.keys())
 
 
-def generate_stock_data(ticker="SBIN", days=365, seed=None):
+def generate_stock_data(ticker="SBIN", days=365, seed=None, end_date=None):
     """
     Generate realistic historical stock price data using Geometric Brownian Motion.
 
@@ -35,6 +35,9 @@ def generate_stock_data(ticker="SBIN", days=365, seed=None):
         ticker: Stock symbol (used to look up base price / volatility profile)
         days: Number of trading days to generate
         seed: Random seed for reproducibility
+        end_date: datetime the generated series should end on (defaults to now) -
+            lets a caller-selected date range line up with what's plotted,
+            even though the underlying prices are still synthetic
 
     Returns:
         pandas DataFrame with columns: scripName, priceDate, Value, Volume
@@ -72,18 +75,22 @@ def generate_stock_data(ticker="SBIN", days=365, seed=None):
             vol = int(base_volume * (1 + price_change_pct * 20) * np.random.uniform(0.7, 1.3))
         volumes.append(vol)
 
-    # Generate dates (skip weekends)
-    end_date = datetime.now()
+    # Generate dates (skip weekends), walking backward from end_date so the
+    # series lands exactly on it instead of the old forward-scan's "roughly
+    # near end_date" approximation (which drifted depending on how weekends
+    # happened to fall within its calendar-day lookback window).
+    end_date = end_date or datetime.now()
     dates = []
-    current = end_date - timedelta(days=int(days * 1.5))  # Start earlier to account for weekends
+    current = end_date
     while len(dates) < days:
         if current.weekday() < 5:  # Monday to Friday
             dates.append(current)
-        current += timedelta(days=1)
+        current -= timedelta(days=1)
+    dates.reverse()
 
     df = pd.DataFrame({
         "scripName": ticker,
-        "priceDate": dates[:days],
+        "priceDate": [d.strftime("%Y-%m-%d") for d in dates[:days]],
         "Value": prices[:days],
         "Volume": volumes[:days],
     })

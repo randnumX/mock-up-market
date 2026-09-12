@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import numpy as np
 from app.data.providers.base import DataProvider
 from app.utils.dummy_data import generate_stock_data, get_dummy_tickers, STOCK_PROFILES
@@ -14,8 +15,14 @@ class DummyProvider(DataProvider):
     def get_tickers(self):
         return get_dummy_tickers()
 
-    def get_history(self, ticker, days=365):
-        return generate_stock_data(ticker, days=days)
+    def get_history(self, ticker, days=365, from_date=None, to_date=None):
+        if not (from_date or to_date):
+            return generate_stock_data(ticker, days=days)
+
+        end = datetime.strptime(to_date, "%Y-%m-%d") if to_date else datetime.now()
+        start = datetime.strptime(from_date, "%Y-%m-%d") if from_date else end - timedelta(days=days)
+        weekdays = sum(1 for d in range((end - start).days + 1) if (start + timedelta(days=d)).weekday() < 5)
+        return generate_stock_data(ticker, days=max(weekdays, 1), end_date=end)
 
     def get_latest_price(self, ticker, last_known_price=None):
         """

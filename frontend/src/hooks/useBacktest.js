@@ -17,7 +17,7 @@ export function useBacktest() {
   const [error, setError] = useState(null)
   const esRef = useRef(null)
 
-  const runBacktest = useCallback(({ ticker, capital, strategy }) => {
+  const runBacktest = useCallback(({ ticker, capital, strategy, from_date, to_date }) => {
     esRef.current?.close()
 
     setLoading(true)
@@ -26,6 +26,8 @@ export function useBacktest() {
     setResults({ ticker, strategy, equity_curve: [], trades: [], streaming: true })
 
     const params = new URLSearchParams({ ticker, capital: String(Number(capital)), strategy })
+    if (from_date) params.set('from_date', from_date)
+    if (to_date) params.set('to_date', to_date)
     const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
     esRef.current = es
 

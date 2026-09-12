@@ -345,6 +345,51 @@ body {
   line-height: 1.4;
 }
 
+/* ===== Date Range Picker ===== */
+.date-range-presets {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.preset-btn {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preset-btn.active,
+.preset-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-range-inputs .form-input {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 0.6rem 0.7rem;
+  color-scheme: dark;
+}
+
+.date-range-sep {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 /* ===== Kite Connect Card ===== */
 .kite-card .card-title {
   display: flex;

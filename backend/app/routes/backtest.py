@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from app.engine.broker import SimulatedBroker
 from app.engine.backtester import BacktestRunner
@@ -8,13 +9,34 @@ from app.data.providers.registry import get_history_with_fallback
 backtest_bp = Blueprint('backtest', __name__)
 
 
-def _prepare_run(ticker, strategy_name, capital, source):
+def _validate_date(value, field_name):
+    if value is None:
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"{field_name} must be in YYYY-MM-DD format")
+    return value
+
+
+def _prepare_run(ticker, strategy_name, capital, source, from_date=None, to_date=None):
     """Shared setup for both the plain and streaming backtest endpoints.
     Returns (runner, data_source, error_response_or_None)."""
     if strategy_name not in STRATEGIES:
         return None, None, (jsonify({"error": f"Unknown strategy: {strategy_name}"}), 400)
 
-    df, data_source = get_history_with_fallback(ticker, days=365, preferred=source)
+    try:
+        from_date = _validate_date(from_date, "from_date")
+        to_date = _validate_date(to_date, "to_date")
+    except ValueError as e:
+        return None, None, (jsonify({"error": str(e)}), 400)
+
+    if from_date and to_date and from_date > to_date:
+        return None, None, (jsonify({"error": "from_date must be on or before to_date"}), 400)
+
+    df, data_source = get_history_with_fallback(
+        ticker, days=365, preferred=source, from_date=from_date, to_date=to_date
+    )
     if df is None:
         return None, None, (jsonify({"error": f"No data available for ticker: {ticker}"}), 404)
 
@@ -32,8 +54,10 @@ def run_backtest():
     capital = float(req.get("capital", 100000))
     strategy_name = req.get("strategy", "macd")
     source = req.get("source")  # optional: force "kite" | "mongodb" | "generated"
+    from_date = req.get("from_date")  # optional: "YYYY-MM-DD", inclusive
+    to_date = req.get("to_date")
 
-    runner, data_source, error = _prepare_run(ticker, strategy_name, capital, source)
+    runner, data_source, error = _prepare_run(ticker, strategy_name, capital, source, from_date, to_date)
     if error:
         return error
 
@@ -58,8 +82,10 @@ def run_backtest_stream():
     capital = float(request.args.get("capital", 100000))
     strategy_name = request.args.get("strategy", "macd")
     source = request.args.get("source")
+    from_date = request.args.get("from_date")
+    to_date = request.args.get("to_date")
 
-    runner, data_source, error = _prepare_run(ticker, strategy_name, capital, source)
+    runner, data_source, error = _prepare_run(ticker, strategy_name, capital, source, from_date, to_date)
     if error:
         return error
 

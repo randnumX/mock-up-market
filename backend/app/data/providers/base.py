@@ -15,10 +15,14 @@ class DataProvider:
         """Return a sorted list of ticker symbols this provider can serve."""
         raise NotImplementedError
 
-    def get_history(self, ticker, days=365):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None):
         """
         Return a pandas DataFrame with columns scripName/priceDate/Value/Volume
         for `ticker`, or None/empty if unavailable for that ticker.
+
+        `from_date`/`to_date` (ISO strings "YYYY-MM-DD", inclusive) restrict
+        the range explicitly, overriding `days`, when given by the caller
+        (e.g. a user-selected backtest date range in the UI).
         """
         raise NotImplementedError
 

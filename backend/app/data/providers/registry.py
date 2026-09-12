@@ -45,10 +45,12 @@ def get_provider(name=None):
     return None
 
 
-def get_history_with_fallback(ticker, days=365, preferred=None):
+def get_history_with_fallback(ticker, days=365, preferred=None, from_date=None, to_date=None):
     """
     Try providers in order (preferred first, if given and available),
     falling back down the chain until one returns data for `ticker`.
+    `from_date`/`to_date` (ISO "YYYY-MM-DD", inclusive) restrict the range
+    explicitly, e.g. a user-selected backtest window in the UI.
     Returns (dataframe, provider_name_used).
     """
     providers = build_providers()
@@ -58,7 +60,7 @@ def get_history_with_fallback(ticker, days=365, preferred=None):
     for p in providers:
         if not p.is_available():
             continue
-        df = p.get_history(ticker, days=days)
+        df = p.get_history(ticker, days=days, from_date=from_date, to_date=to_date)
         if df is not None and not df.empty:
             return df, p.name
 
