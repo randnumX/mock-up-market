@@ -1,0 +1,51 @@
+---
+description: Provides the current architectural context and overview of the automated trading engine.
+---
+# Project Context: Mock-Up Market (Automated Trading Engine)
+
+An automated algorithmic trading engine for the Indian stock market (NSE) with backtesting, tax-aware profit calculation, real market data via Zerodha Kite Connect, and a premium real-time dashboard.
+
+## Current Architecture (v2.1)
+
+### Backend (`backend/`)
+Flask REST API with Blueprints pattern.
+
+- **Entry Point**: `run.py` → loads `.env` via `python-dotenv`, creates Flask app via factory
+- **Config**: `app/config.py` — reads all settings from environment variables (incl. Kite Connect credentials)
+- **API Routes** (`app/routes/`):
+  - `health.py` — `GET /api/health` (per-provider availability, version)
+  - `tickers.py` — `GET /api/tickers` (tickers merged across all available providers)
+  - `backtest.py` — `POST /api/backtest` (runs engine, returns JSON results); `GET /api/strategies`
+  - `kite.py` — `/api/kite/*` (login-url, callback, status, disconnect, sync)
+- **Engine** (`app/engine/`):
+  - `strategy.py` — Base event-driven strategy class
+  - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py` — four pluggable strategy implementations, all registered in `routes/backtest.py`'s `STRATEGIES` dict
+  - `backtester.py` — BacktestRunner with equity curve, max drawdown, win rate
+  - `broker.py` — SimulatedBroker with tax-aware trade execution
+- **Utils** (`app/utils/`):
+  - `taxes.py` — Indian equity tax calculator (STT, GST, SEBI, Stamp Duty)
+  - `dummy_data.py` — Generates realistic synthetic stock data via Geometric Brownian Motion
+- **Data** (`app/data/`):
+  - `db.py` — MongoDB connection helper with graceful fallback
+  - `kite_client.py` — Kite Connect session lifecycle (login URL, token exchange, daily session persisted to `backend/.kite_session.json`, gitignored)
+  - `kite_ingest.py` — Resolves NSE instrument tokens and fetches/upserts historical candles into Mongo
+  - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history`); `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`. **Routes never import Mongo or Kite directly** — only the registry. Adding a new data source means writing one `DataProvider` subclass and adding it to `build_providers()`.
+
+### Frontend (`frontend/`)
+Vite + React single-page application.
+
+- **Components**: Header, StatusBadge, ConfigPanel, KiteConnect, MetricsGrid, EquityChart (TradingView lightweight-charts), TradeLog
+- **Hooks**: `useBacktest`, `useTickers`, `useHealth`, `useStrategies`, `useKite`
+- **Design**: Premium dark mode with glassmorphism, Inter font, CSS custom properties
+- **Dev Server**: Port 5173 with Vite proxy to Flask backend on port 5000
+
+### Key Design Decisions
+- **Zero-setup demo**: App works fully without MongoDB or a broker account using generated dummy data
+- **Data source is dependency-injected**: `routes/*.py` depend only on the `DataProvider` interface via `providers/registry.py`; Kite Connect was added as a new provider alongside Mongo/dummy, not a replacement or special-cased branch
+- **Tax-aware**: Every simulated sell deducts realistic Indian equity taxes
+- **TradingView charts**: Professional-grade financial charts via `lightweight-charts`
+- **Event-driven strategy**: Base `Strategy` class allows pluggable algorithms; four are currently registered (MACD, RSI, SMA Crossover, Bollinger Bands)
+- **Tested**: `backend/tests/` (pytest) covers taxes, broker, all four strategies end-to-end, and provider availability/fallback behavior
+
+### Legacy Code
+`AlgoTrading/` (original scripts) and `api/` (original Flask stub) have been removed — both were explicitly superseded by `backend/` and fully duplicated by `app/engine/` + the providers layer. If reference material from them is ever needed again, it's recoverable from git history prior to their removal.
