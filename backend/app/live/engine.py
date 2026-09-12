@@ -113,12 +113,15 @@ def run_tick(db, session, kite):
 def summarize_session(session):
     """Derived, display-ready fields on top of the raw persisted session doc."""
     last_price = session.get("last_price") or 0
-    open_value = sum(pos["qty"] * last_price for pos in session.get("positions", {}).values())
+    positions = session.get("positions", {}).values()
+    open_value = sum(pos["qty"] * last_price for pos in positions)
+    open_cost = sum(pos["qty"] * pos["avg_price"] for pos in positions)
     equity = session.get("cash", 0) + open_value
     roi = ((equity - session["capital"]) / session["capital"] * 100) if session["capital"] else 0
     return {
         **session,
         "open_position_value": round(open_value, 2),
+        "unrealized_pnl": round(open_value - open_cost, 2),
         "equity": round(equity, 2),
         "roi": round(roi, 2),
     }

@@ -36,6 +36,8 @@ export default function MetricsGrid({ results, progress }) {
   if (!results) return null
   if (results.streaming) return <StreamingMetrics results={results} progress={progress} />
 
+  const hasOpenPosition = results.open_position_value > 0
+
   const metrics = [
     {
       label: 'Net ROI',
@@ -44,11 +46,17 @@ export default function MetricsGrid({ results, progress }) {
       sub: `${results.total_trades} trades executed`,
     },
     {
-      label: 'Net Profit',
+      label: 'Realized P&L',
       value: `₹${results.realized_pnl.toLocaleString('en-IN')}`,
       className: results.realized_pnl >= 0 ? 'positive' : 'negative',
-      sub: `Win rate: ${results.win_rate}%`,
+      sub: `From closed trades · Win rate: ${results.win_rate}%`,
     },
+    ...(hasOpenPosition ? [{
+      label: 'Unrealized P&L',
+      value: `${results.unrealized_pnl >= 0 ? '+' : ''}₹${results.unrealized_pnl.toLocaleString('en-IN')}`,
+      className: results.unrealized_pnl >= 0 ? 'positive' : 'negative',
+      sub: 'Paper gain/loss on the open position',
+    }] : []),
     {
       label: 'Taxes & Charges',
       value: `₹${results.total_taxes.toLocaleString('en-IN')}`,
@@ -59,7 +67,7 @@ export default function MetricsGrid({ results, progress }) {
       label: 'Final Capital',
       value: `₹${results.final_capital.toLocaleString('en-IN')}`,
       className: 'accent',
-      sub: results.open_position_value > 0
+      sub: hasOpenPosition
         ? `Incl. ₹${results.open_position_value.toLocaleString('en-IN')} open position`
         : `Max Drawdown: ${results.max_drawdown}%`,
     },

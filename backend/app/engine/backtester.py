@@ -51,6 +51,8 @@ class BacktestRunner:
         # evaporated - final equity is cash + market value of open holdings.
         last_price = self.data.iloc[-1]["Value"] if len(self.data) else 0
         open_position_value = sum(pos["qty"] * last_price for pos in self.broker.positions.values())
+        open_position_cost = sum(pos["qty"] * pos["avg_price"] for pos in self.broker.positions.values())
+        unrealized_pnl = open_position_value - open_position_cost
         final_equity = self.broker.capital + open_position_value
 
         roi = ((final_equity - self.broker.initial_capital) / self.broker.initial_capital) * 100 if self.broker.initial_capital else 0
@@ -74,6 +76,7 @@ class BacktestRunner:
             "initial_capital": round(self.broker.initial_capital, 2),
             "final_capital": round(final_equity, 2),
             "open_position_value": round(open_position_value, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
             "total_taxes": round(self.broker.total_taxes, 2),
             "realized_pnl": round(self.broker.realized_pnl, 2),
             "roi": round(roi, 2),

@@ -52,4 +52,30 @@ def test_final_capital_matches_cash_when_no_open_position():
     results = runner.run()
 
     assert results["open_position_value"] == 0
+    assert results["unrealized_pnl"] == 0
     assert results["final_capital"] == results["initial_capital"]
+
+
+def test_unrealized_pnl_positive_when_open_position_gained():
+    df = _df([100, 100, 110, 120, 130])  # bought at 100, ends at 130
+    broker = SimulatedBroker(10000)
+    runner = BacktestRunner(broker, BuyAndHoldOnce(broker))
+    runner.load_data(df)
+    results = runner.run()
+
+    qty = int(10000 // 100)
+    expected = qty * (130 - 100)
+    assert results["unrealized_pnl"] == expected
+
+
+def test_unrealized_pnl_negative_when_open_position_lost():
+    df = _df([100, 100, 90, 80, 70])  # bought at 100, ends at 70
+    broker = SimulatedBroker(10000)
+    runner = BacktestRunner(broker, BuyAndHoldOnce(broker))
+    runner.load_data(df)
+    results = runner.run()
+
+    qty = int(10000 // 100)
+    expected = qty * (70 - 100)
+    assert results["unrealized_pnl"] == expected
+    assert results["unrealized_pnl"] < 0
