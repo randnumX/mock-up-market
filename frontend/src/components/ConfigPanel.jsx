@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
 
 export default function ConfigPanel({ tickers, loading, onRun }) {
@@ -70,7 +71,7 @@ export default function ConfigPanel({ tickers, loading, onRun }) {
               Running...
             </>
           ) : (
-            '▶ Run Backtest'
+            <><Play size={16} /> Run Backtest</>
           )}
         </button>
       </form>

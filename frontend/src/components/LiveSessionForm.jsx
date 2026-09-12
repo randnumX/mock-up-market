@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { FileText, TriangleAlert, Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
 
 export default function LiveSessionForm({ tickers, kiteConnected, onCreate, creating, error }) {
@@ -37,10 +38,10 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
           <label className="form-label">Mode</label>
           <div className="mode-toggle">
             <button type="button" className={`mode-btn ${mode === 'paper' ? 'active' : ''}`} onClick={() => setMode('paper')}>
-              📝 Paper (virtual money)
+              <FileText size={14} /> Paper (virtual money)
             </button>
             <button type="button" className={`mode-btn mode-btn-live ${mode === 'live' ? 'active' : ''}`} onClick={() => setMode('live')}>
-              ⚠️ Live (real money)
+              <TriangleAlert size={14} /> Live (real money)
             </button>
           </div>
         </div>
@@ -98,7 +99,11 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
           className={`btn-primary ${isLive ? 'btn-danger' : ''}`}
           disabled={creating || (isLive && (!kiteConnected || !confirmed))}
         >
-          {creating ? (<><div className="spinner" /> Starting…</>) : isLive ? '⚠ Start Live Session' : '▶ Start Paper Session'}
+          {creating
+            ? (<><div className="spinner" /> Starting…</>)
+            : isLive
+              ? (<><TriangleAlert size={16} /> Start Live Session</>)
+              : (<><Play size={16} /> Start Paper Session</>)}
         </button>
       </form>
     </div>

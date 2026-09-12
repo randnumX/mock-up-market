@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BarChart3, Zap } from 'lucide-react'
 import Header from './components/Header'
 import StatusBadge from './components/StatusBadge'
 import ConfigPanel from './components/ConfigPanel'
@@ -36,10 +37,10 @@ export default function App() {
 
         <div className="view-tabs animate-in">
           <button className={`view-tab ${view === 'backtest' ? 'active' : ''}`} onClick={() => setView('backtest')}>
-            📊 Backtest
+            <BarChart3 size={15} /> Backtest
           </button>
           <button className={`view-tab ${view === 'live' ? 'active' : ''}`} onClick={() => setView('live')}>
-            ⚡ Live Trading
+            <Zap size={15} /> Live Trading
           </button>
         </div>
 

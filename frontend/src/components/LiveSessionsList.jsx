@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FileText, TriangleAlert, Square, Power, Zap } from 'lucide-react'
 
 const STATUS_LABELS = {
   running: { label: 'Running', cls: 'online' },
@@ -16,7 +17,7 @@ function SessionCard({ session, onStop }) {
       <div className="session-card-header">
         <div>
           <span className={`mode-pill ${session.mode === 'live' ? 'mode-pill-live' : 'mode-pill-paper'}`}>
-            {session.mode === 'live' ? '⚠ LIVE' : '📝 PAPER'}
+            {session.mode === 'live' ? (<><TriangleAlert size={11} /> LIVE</>) : (<><FileText size={11} /> PAPER</>)}
           </span>
           <strong className="session-ticker">{session.ticker}</strong>
           <span className="session-strategy">{session.strategy}</span>
@@ -63,7 +64,7 @@ function SessionCard({ session, onStop }) {
                   <td><span className={`trade-type ${t.type === 'BUY' ? 'buy' : 'sell'}`}>{t.type}</span></td>
                   <td>{t.qty} @ ₹{t.price}</td>
                   <td className={t.pnl > 0 ? 'pnl-positive' : t.pnl < 0 ? 'pnl-negative' : ''}>
-                    {t.pnl !== undefined ? `₹${t.pnl}` : t.error ? `⚠ ${t.error}` : ''}
+                    {t.pnl !== undefined ? `₹${t.pnl}` : t.error ? (<span className="pnl-negative"><TriangleAlert size={12} style={{ verticalAlign: 'text-bottom' }} /> {t.error}</span>) : ''}
                   </td>
                 </tr>
               ))}
@@ -73,8 +74,8 @@ function SessionCard({ session, onStop }) {
       )}
 
       {session.status === 'running' && (
-        <button className="btn-secondary" style={{ marginTop: '0.75rem' }} onClick={() => onStop(session._id)}>
-          ■ Stop Session
+        <button className="btn-secondary btn-with-icon" style={{ marginTop: '0.75rem' }} onClick={() => onStop(session._id)}>
+          <Square size={13} /> Stop Session
         </button>
       )}
     </div>
@@ -100,7 +101,7 @@ export default function LiveSessionsList({ sessions, onStop, onKillAll }) {
       <div className="glass-card">
         <div className="card-title">Live Sessions</div>
         <div className="empty-state">
-          <div className="empty-state-icon">⚡</div>
+          <div className="empty-state-icon"><Zap size={40} strokeWidth={1.5} /></div>
           <div className="empty-state-text">No live sessions yet. Start a paper session on the left to see it here.</div>
         </div>
       </div>
@@ -112,8 +113,8 @@ export default function LiveSessionsList({ sessions, onStop, onKillAll }) {
       {runningCount > 0 && (
         <div className="kill-switch-bar animate-in">
           <span>{runningCount} session{runningCount !== 1 ? 's' : ''} running</span>
-          <button className="btn-danger-outline" onClick={handleKillAll}>
-            {confirmingKill ? 'Click again to confirm — stops ALL sessions' : '⏻ Kill Switch: Stop All'}
+          <button className="btn-danger-outline btn-with-icon" onClick={handleKillAll}>
+            {confirmingKill ? 'Click again to confirm — stops ALL sessions' : (<><Power size={14} /> Kill Switch: Stop All</>)}
           </button>
         </div>
       )}

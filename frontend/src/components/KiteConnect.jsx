@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Link2, RefreshCw } from 'lucide-react'
 import { useKite } from '../hooks/useBacktest'
 
 export default function KiteConnect({ onSynced }) {
@@ -44,11 +45,11 @@ export default function KiteConnect({ onSynced }) {
       </div>
 
       {!status.connected ? (
-        <button className="btn-primary" onClick={connect}>🔗 Connect Zerodha</button>
+        <button className="btn-primary" onClick={connect}><Link2 size={16} /> Connect Zerodha</button>
       ) : (
         <div className="kite-actions">
           <button className="btn-primary" onClick={handleSync} disabled={syncing}>
-            {syncing ? (<><div className="spinner" /> Syncing…</>) : '⇅ Sync Real Data'}
+            {syncing ? (<><div className="spinner" /> Syncing…</>) : (<><RefreshCw size={16} /> Sync Real Data</>)}
           </button>
           <button className="btn-secondary" onClick={disconnect}>Disconnect</button>
         </div>

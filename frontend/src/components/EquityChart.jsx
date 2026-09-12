@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, createSeriesMarkers, AreaSeries, ColorType } from 'lightweight-charts'
+import { LineChart } from 'lucide-react'
 
 export default function EquityChart({ results }) {
   const chartRef = useRef(null)
@@ -18,24 +19,24 @@ export default function EquityChart({ results }) {
     const chart = createChart(chartRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#94a3b8',
+        textColor: '#c65b7c',
         fontSize: 12,
         fontFamily: 'Inter, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(255,255,255,0.03)' },
-        horzLines: { color: 'rgba(255,255,255,0.03)' },
+        vertLines: { color: 'rgba(249,173,160,0.05)' },
+        horzLines: { color: 'rgba(249,173,160,0.05)' },
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: 'rgba(0,229,255,0.3)', width: 1, style: 2 },
-        horzLine: { color: 'rgba(0,229,255,0.3)', width: 1, style: 2 },
+        vertLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
+        horzLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(249,173,160,0.12)',
       },
       timeScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(249,173,160,0.12)',
         timeVisible: false,
       },
       handleScroll: true,
@@ -57,9 +58,9 @@ export default function EquityChart({ results }) {
         .filter((p) => p.time !== null)
 
       const series = chart.addSeries(AreaSeries, {
-        topColor: 'rgba(0, 229, 255, 0.35)',
-        bottomColor: 'rgba(0, 229, 255, 0.0)',
-        lineColor: '#00e5ff',
+        topColor: 'rgba(131, 182, 146, 0.35)',
+        bottomColor: 'rgba(131, 182, 146, 0.0)',
+        lineColor: '#83b692',
         lineWidth: 2,
       })
       series.setData(data)
@@ -69,9 +70,9 @@ export default function EquityChart({ results }) {
         .filter((p) => p.time !== null)
 
       const series = chart.addSeries(AreaSeries, {
-        topColor: 'rgba(99, 102, 241, 0.3)',
-        bottomColor: 'rgba(99, 102, 241, 0.0)',
-        lineColor: '#6366f1',
+        topColor: 'rgba(198, 91, 124, 0.3)',
+        bottomColor: 'rgba(198, 91, 124, 0.0)',
+        lineColor: '#c65b7c',
         lineWidth: 2,
       })
       series.setData(data)
@@ -84,7 +85,7 @@ export default function EquityChart({ results }) {
           return {
             time,
             position: t.type === 'BUY' ? 'belowBar' : 'aboveBar',
-            color: t.type === 'BUY' ? '#00e5ff' : '#f59e0b',
+            color: t.type === 'BUY' ? '#83b692' : '#f9627d',
             shape: t.type === 'BUY' ? 'arrowUp' : 'arrowDown',
             text: t.type,
           }
@@ -123,7 +124,7 @@ export default function EquityChart({ results }) {
       <div className="glass-card">
         <div className="card-title">Chart</div>
         <div className="empty-state">
-          <div className="empty-state-icon">📊</div>
+          <div className="empty-state-icon"><LineChart size={40} strokeWidth={1.5} /></div>
           <div className="empty-state-text">
             Configure your backtest parameters and hit <strong>Run Backtest</strong> to see the equity curve here.
           </div>
