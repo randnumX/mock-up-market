@@ -30,6 +30,17 @@ npm run dev
 
 Open **http://localhost:5173** in your browser.
 
+## Local MongoDB (optional, required for Live Trading)
+
+The app works fully without MongoDB (synthetic data, backtesting only). To enable real ticker sync and the Live Trading engine, run Mongo locally via Docker instead of installing it as a native binary:
+
+```bash
+docker compose up -d      # starts MongoDB in the background
+docker compose down       # stops it (add -v to also wipe stored data)
+```
+
+`backend/.env` already points at it (`MONGO_URI=mongodb://localhost:27017`) — no other config needed. Check `GET /api/health` for `"db_connected": true` once it's up.
+
 ## Real Market Data (Zerodha Kite Connect)
 
 1. Create an app at [developers.kite.trade](https://developers.kite.trade/apps) (₹2000/month subscription). Set its **Redirect URL** to `http://localhost:5000/api/kite/callback`.
