@@ -21,3 +21,13 @@ class DataProvider:
         for `ticker`, or None/empty if unavailable for that ticker.
         """
         raise NotImplementedError
+
+    def get_latest_price(self, ticker, last_known_price=None):
+        """
+        Return the current/latest tradeable price for `ticker` as a float,
+        or None if unavailable. Used by the live trading engine to advance
+        a running session one tick at a time. `last_known_price` lets a
+        simulated provider (no real feed) generate a plausible next tick
+        instead of replaying static history.
+        """
+        raise NotImplementedError

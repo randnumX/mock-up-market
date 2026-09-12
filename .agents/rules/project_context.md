@@ -17,6 +17,7 @@ Flask REST API with Blueprints pattern.
   - `tickers.py` — `GET /api/tickers` (tickers merged across all available providers)
   - `backtest.py` — `POST /api/backtest` (runs engine, returns JSON results); `GET /api/strategies`
   - `kite.py` — `/api/kite/*` (login-url, callback, status, disconnect, sync)
+  - `live.py` — `/api/live/*` (create/list/get/stop session, kill-all, market-status)
 - **Engine** (`app/engine/`):
   - `strategy.py` — Base event-driven strategy class
   - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py` — four pluggable strategy implementations, all registered in `routes/backtest.py`'s `STRATEGIES` dict
@@ -29,7 +30,13 @@ Flask REST API with Blueprints pattern.
   - `db.py` — MongoDB connection helper with graceful fallback
   - `kite_client.py` — Kite Connect session lifecycle (login URL, token exchange, daily session persisted to `backend/.kite_session.json`, gitignored)
   - `kite_ingest.py` — Resolves NSE instrument tokens and fetches/upserts historical candles into Mongo
-  - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history`); `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`. **Routes never import Mongo or Kite directly** — only the registry. Adding a new data source means writing one `DataProvider` subclass and adding it to `build_providers()`.
+  - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history`, `get_latest_price`); `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`. **Routes never import Mongo or Kite directly** — only the registry. Adding a new data source means writing one `DataProvider` subclass and adding it to `build_providers()`.
+- **Live Trading** (`app/live/`):
+  - `broker.py` — `PaperBroker` (subclasses `SimulatedBroker`, virtual money) and `KiteLiveBroker` (real orders via Kite's Order API); both share the same `place_order(...)` signature the `Strategy` classes already call, and both accept an optional `max_capital_per_trade` cap
+  - `engine.py` — `run_tick()` advances one session by one price tick (fetch latest price → append to persisted bar history → `strategy.on_bar()` → persist); `start_scheduler()` runs an APScheduler job every `LIVE_POLL_INTERVAL_SECONDS` calling this for every `status="running"` session. Strategy indicator state (EMA/RSI/SMA/Bollinger columns, and flags like `bought`) round-trips through Mongo every tick so a session resumes correctly after a restart
+  - `store.py` — Mongo CRUD for the `LiveSessions` collection (session state must survive restarts - this is why live trading has no dummy-data-only mode, unlike backtesting)
+  - `risk.py` — pure, DB-free risk checks (`check_daily_loss_limit`, `check_capital_exhausted`, `rollover_daily_pnl`) the engine consults every tick
+  - `market_hours.py` — NSE hours gate (9:15-15:30 IST, Mon-Fri); only enforced once a real Kite price feed is involved, so a paper session on the simulated feed can demo continuously
 
 ### Frontend (`frontend/`)
 Vite + React single-page application.

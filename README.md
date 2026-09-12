@@ -10,6 +10,7 @@ A production-grade algorithmic trading engine for the Indian stock market (NSE) 
 - **Pluggable Data Providers** — Zerodha Kite Connect (real, live), MongoDB (previously-synced), and a synthetic generator all implement the same `DataProvider` interface and are swapped in/out with zero route changes — see [Data Providers](#data-providers)
 - **Zero-Setup Demo** — Works instantly with generated dummy data (no MongoDB or broker account required)
 - **Connect Zerodha** — One click in the dashboard to log in via Kite Connect and sync real NSE history into MongoDB
+- **Live Trading Engine** — Run any strategy unattended against live prices in Paper mode (virtual money) or Live mode (real Zerodha orders), with per-trade capital caps, a daily loss limit, and a kill switch — see [Live Trading](#live-trading)
 
 ## Quick Start
 
@@ -43,6 +44,21 @@ Open **http://localhost:5173** in your browser.
 Without steps 1-2, the app runs exactly as before on MongoDB / synthetic data — nothing else changes.
 
 For headless/cron use there are CLI equivalents: `python scripts/kite_login.py` and `python scripts/fetch_data.py`.
+
+## Live Trading
+
+The **Live Trading** tab runs the same `Strategy` classes used for backtesting against a live price feed, one tick at a time, on an in-process scheduler (polls every `LIVE_POLL_INTERVAL_SECONDS`, default 30s). Requires MongoDB — a session's whole point is to keep running unattended, so its state (cash, positions, trade history, rolling indicator bars) is persisted after every tick and survives a backend restart.
+
+Two modes, same strategy code, different `Broker`:
+- **Paper** — virtual money. Uses live Kite prices if connected, otherwise a simulated price feed, so paper trading works with zero setup just like backtesting. Zero financial risk.
+- **Live** — places real orders on your connected Zerodha account via `KiteLiveBroker`. Requires an active Kite connection, an explicit `confirm: true`, and a mandatory `max_capital_per_trade` cap. Real capital, real risk — test in Paper mode first.
+
+Risk controls apply to both modes:
+- **Max capital per trade** clamps order size regardless of what the strategy's position sizing requests.
+- **Daily loss limit** auto-halts a session once the day's realized losses reach the configured amount.
+- **Kill switch** (`POST /api/live/kill-all`, or the button in the UI) immediately stops every running session, paper and live.
+
+Live sessions only tick during NSE market hours (9:15–15:30 IST, Mon–Fri) once real Kite prices are involved; a paper session on the simulated feed (no Kite connected) ticks continuously so the demo isn't gated on market hours.
 
 ## Data Providers
 

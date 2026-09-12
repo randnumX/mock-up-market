@@ -11,6 +11,11 @@ class Config:
     COLLECTION_TICKERS = 'StockPricesData'
     COLLECTION_TIMESERIES = 'StockPriceDataTimeSeries'
     COLLECTION_HISTORICAL = 'LastOneYearStockData'
+    COLLECTION_LIVE_SESSIONS = 'LiveSessions'
+
+    # Live trading engine
+    LIVE_POLL_INTERVAL_SECONDS = int(os.getenv('LIVE_POLL_INTERVAL_SECONDS', '30'))
+    LIVE_IGNORE_MARKET_HOURS = os.getenv('LIVE_IGNORE_MARKET_HOURS', 'false').lower() == 'true'
 
     # Zerodha Kite Connect (real market data ingestion)
     KITE_API_KEY = os.getenv('KITE_API_KEY', '')

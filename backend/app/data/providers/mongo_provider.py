@@ -31,3 +31,16 @@ class MongoProvider(DataProvider):
         if not records:
             return None
         return pd.DataFrame(records)
+
+    def get_latest_price(self, ticker, last_known_price=None):
+        """Mongo only holds daily candles, not a live feed - last stored close is the
+        best it can offer. Sessions using this provider should expect coarse ticks."""
+        if not self.is_available():
+            return None
+        try:
+            doc = self.db[Config.COLLECTION_HISTORICAL].find_one(
+                {"scripName": ticker}, sort=[("priceDate", -1)]
+            )
+        except Exception:
+            return None
+        return float(doc["Value"]) if doc else None

@@ -45,3 +45,12 @@ class KiteProvider(DataProvider):
             "Value": [float(c["close"]) for c in candles],
             "Volume": [int(c["volume"]) for c in candles],
         })
+
+    def get_latest_price(self, ticker, last_known_price=None):
+        if not self.is_available():
+            return None
+        try:
+            quote = self.kite.ltp([f"NSE:{ticker}"])
+            return float(quote[f"NSE:{ticker}"]["last_price"])
+        except Exception:
+            return None

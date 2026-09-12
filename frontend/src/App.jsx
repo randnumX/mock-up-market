@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import StatusBadge from './components/StatusBadge'
 import ConfigPanel from './components/ConfigPanel'
@@ -6,9 +6,11 @@ import KiteConnect from './components/KiteConnect'
 import MetricsGrid from './components/MetricsGrid'
 import EquityChart from './components/EquityChart'
 import TradeLog from './components/TradeLog'
+import LiveTrading from './components/LiveTrading'
 import { useBacktest, useTickers, useHealth } from './hooks/useBacktest'
 
 export default function App() {
+  const [view, setView] = useState('backtest')
   const { results, loading, error, runBacktest } = useBacktest()
   const { tickers, fetchTickers } = useTickers()
   const { health, fetchHealth } = useHealth()
@@ -32,32 +34,45 @@ export default function App() {
           <StatusBadge health={health} />
         </div>
 
-        <div className="main-grid">
-          {/* Left Sidebar */}
-          <div>
-            <ConfigPanel
-              tickers={tickers}
-              loading={loading}
-              onRun={runBacktest}
-            />
-            <div style={{ marginTop: '1rem' }}>
-              <KiteConnect onSynced={refreshAfterSync} />
-            </div>
-            {error && (
-              <div className="glass-card animate-in" style={{ marginTop: '1rem', borderColor: 'var(--negative)' }}>
-                <div className="card-title" style={{ color: 'var(--negative)' }}>Error</div>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{error}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Right Main Area */}
-          <div className="right-panel">
-            <MetricsGrid results={results} />
-            <EquityChart results={results} />
-            <TradeLog results={results} />
-          </div>
+        <div className="view-tabs animate-in">
+          <button className={`view-tab ${view === 'backtest' ? 'active' : ''}`} onClick={() => setView('backtest')}>
+            📊 Backtest
+          </button>
+          <button className={`view-tab ${view === 'live' ? 'active' : ''}`} onClick={() => setView('live')}>
+            ⚡ Live Trading
+          </button>
         </div>
+
+        {view === 'backtest' ? (
+          <div className="main-grid">
+            {/* Left Sidebar */}
+            <div>
+              <ConfigPanel
+                tickers={tickers}
+                loading={loading}
+                onRun={runBacktest}
+              />
+              <div style={{ marginTop: '1rem' }}>
+                <KiteConnect onSynced={refreshAfterSync} />
+              </div>
+              {error && (
+                <div className="glass-card animate-in" style={{ marginTop: '1rem', borderColor: 'var(--negative)' }}>
+                  <div className="card-title" style={{ color: 'var(--negative)' }}>Error</div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{error}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Main Area */}
+            <div className="right-panel">
+              <MetricsGrid results={results} />
+              <EquityChart results={results} />
+              <TradeLog results={results} />
+            </div>
+          </div>
+        ) : (
+          <LiveTrading tickers={tickers} />
+        )}
       </div>
     </>
   )
