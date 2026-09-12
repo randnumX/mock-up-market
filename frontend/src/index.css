@@ -455,6 +455,56 @@ body {
   margin-top: 0.25rem;
 }
 
+/* ===== Overall Summary Banner ===== */
+.overall-summary {
+  border-radius: var(--radius-xl);
+  padding: 1.1rem 1.5rem;
+  border: 1px solid var(--glass-border);
+  text-align: center;
+}
+
+.overall-summary-gain {
+  background: linear-gradient(135deg, rgba(131, 182, 146, 0.14), rgba(131, 182, 146, 0.04));
+  border-color: rgba(131, 182, 146, 0.3);
+}
+
+.overall-summary-loss {
+  background: linear-gradient(135deg, rgba(249, 98, 125, 0.14), rgba(249, 98, 125, 0.04));
+  border-color: rgba(249, 98, 125, 0.3);
+}
+
+.overall-summary-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.overall-summary-amount {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.overall-summary-arrow {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.overall-summary-delta {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 0.35rem;
+}
+
+.overall-summary-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
 /* ===== Chart ===== */
 .chart-wrapper {
   position: relative;

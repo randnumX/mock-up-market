@@ -1,3 +1,5 @@
+import { fmtINR, signedINR } from '../utils/format'
+
 export default function TradeLog({ results }) {
   if (!results || !results.trades || results.trades.length === 0) return null
 
@@ -35,10 +37,10 @@ export default function TradeLog({ results }) {
                   </span>
                 </td>
                 <td>{t.qty}</td>
-                <td>₹{t.price.toFixed(2)}</td>
-                <td>{t.taxes !== undefined ? `₹${t.taxes.toFixed(2)}` : '—'}</td>
+                <td>{fmtINR(t.price)}</td>
+                <td>{t.taxes !== undefined ? fmtINR(t.taxes) : '—'}</td>
                 <td className={t.pnl !== undefined ? (t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') : ''}>
-                  {t.pnl !== undefined ? `₹${t.pnl.toFixed(2)}` : '—'}
+                  {t.pnl !== undefined ? signedINR(t.pnl) : '—'}
                 </td>
               </tr>
             ))}

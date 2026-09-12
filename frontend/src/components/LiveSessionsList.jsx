@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileText, TriangleAlert, Square, Power, Zap } from 'lucide-react'
+import { fmtINR, signedINR } from '../utils/format'
 
 const STATUS_LABELS = {
   running: { label: 'Running', cls: 'online' },
@@ -32,7 +33,7 @@ function SessionCard({ session, onStop }) {
         <div>
           <div className="metric-label">Equity</div>
           <div className={`metric-value ${session.roi >= 0 ? 'positive' : 'negative'}`} style={{ fontSize: '1.15rem' }}>
-            ₹{session.equity?.toLocaleString('en-IN')}
+            {session.equity !== undefined ? fmtINR(session.equity) : '—'}
           </div>
         </div>
         <div>
@@ -51,7 +52,7 @@ function SessionCard({ session, onStop }) {
 
       {positions.length > 0 && (
         <p className="form-hint">
-          Holding {positions.map(([sym, p]) => `${p.qty} × ${sym}`).join(', ')} @ last price ₹{session.last_price}
+          Holding {positions.map(([sym, p]) => `${p.qty} × ${sym}`).join(', ')} @ last price {fmtINR(session.last_price)}
         </p>
       )}
 
@@ -62,9 +63,9 @@ function SessionCard({ session, onStop }) {
               {recentTrades.map((t, i) => (
                 <tr key={i}>
                   <td><span className={`trade-type ${t.type === 'BUY' ? 'buy' : 'sell'}`}>{t.type}</span></td>
-                  <td>{t.qty} @ ₹{t.price}</td>
+                  <td>{t.qty} @ {fmtINR(t.price)}</td>
                   <td className={t.pnl > 0 ? 'pnl-positive' : t.pnl < 0 ? 'pnl-negative' : ''}>
-                    {t.pnl !== undefined ? `₹${t.pnl}` : t.error ? (<span className="pnl-negative"><TriangleAlert size={12} style={{ verticalAlign: 'text-bottom' }} /> {t.error}</span>) : ''}
+                    {t.pnl !== undefined ? signedINR(t.pnl) : t.error ? (<span className="pnl-negative"><TriangleAlert size={12} style={{ verticalAlign: 'text-bottom' }} /> {t.error}</span>) : ''}
                   </td>
                 </tr>
               ))}
