@@ -1,4 +1,3 @@
-import math
 import pandas as pd
 import warnings
 from app.engine.strategy import Strategy
@@ -14,8 +13,8 @@ class MACDStrategy(Strategy):
     Sell signal: MACD crosses below Signal line while MACD > 0 (bearish reversal)
     """
 
-    def __init__(self, broker, shorter_days=12, longer_days=26, signal_days=9):
-        super().__init__(broker)
+    def __init__(self, broker, shorter_days=12, longer_days=26, signal_days=9, position_sizer=None):
+        super().__init__(broker, position_sizer=position_sizer)
         self.shorter_days = shorter_days
         self.longer_days = longer_days
         self.signal_days = signal_days
@@ -71,7 +70,7 @@ class MACDStrategy(Strategy):
 
         # Buy: MACD crosses above signal, MACD < 0 (bullish reversal from below)
         if macd_curr > sig_curr and macd_prev < sig_prev and macd_curr < 0 and not self.bought:
-            quantity = math.floor(self.broker.capital / price)
+            quantity = self.quantity_for(price, df, i)
             if quantity > 0:
                 if self.buy(symbol, price, quantity, timestamp):
                     self.bought = True

@@ -84,7 +84,16 @@ Risk controls apply to both modes:
 - **Daily loss limit** auto-halts a session once the day's realized losses reach the configured amount.
 - **Kill switch** (`POST /api/live/kill-all`, or the button in the UI) immediately stops every running session, paper and live.
 
-Live sessions only tick during NSE market hours (9:15–15:30 IST, Mon–Fri) once real Kite prices are involved; a paper session on the simulated feed (no Kite connected) ticks continuously so the demo isn't gated on market hours.
+Live sessions only tick during NSE market hours (9:15–15:30 IST, Mon–Fri, excluding published NSE trading holidays — `app/live/nse_holidays.py`) once real Kite prices are involved; a paper session on the simulated feed (no Kite connected) ticks continuously so the demo isn't gated on market hours.
+
+## Position Sizing
+
+Every strategy previously bet 100% of available capital on every trade. `GET /api/position-sizing-modes` lists three pluggable modes (`app/engine/position_sizing.py`), selectable in both the Backtest and Live Trading forms:
+- **Full Capital** (default) — original behavior, bets everything available.
+- **Fixed Fraction** — bets a fixed `fraction` of capital per trade regardless of signal strength.
+- **Volatility Target** — sizes so a ~1-standard-deviation move costs a fixed `risk_per_trade` of capital (computed from `lookback`-bar return volatility) — calmer stocks get bigger positions, choppier ones smaller.
+
+Pass `{"position_sizing": {"mode": "fixed_fraction", "fraction": 0.2}}` (or `volatility_target` with `risk_per_trade`/`lookback`) to `POST /api/backtest` or `POST /api/live/sessions`; omit it for the original full-capital behavior.
 
 ## Data Providers
 
@@ -126,6 +135,7 @@ mock-up-market/
 | GET | `/api/health` | Server status + per-provider availability |
 | GET | `/api/tickers` | Available stock tickers, merged across active providers |
 | GET | `/api/strategies` | List of available strategies with descriptions |
+| GET | `/api/position-sizing-modes` | List of available position sizing modes with descriptions/params |
 | POST | `/api/backtest` | Run a backtest (body: `{ticker, capital, strategy, source?, from_date?, to_date?}`) |
 | GET | `/api/backtest/stream` | Same backtest as an SSE stream (query params, same fields) - one `tick` event per bar, then a `done` event with the identical result shape |
 | GET | `/api/kite/status` | Whether Kite Connect is configured/connected |

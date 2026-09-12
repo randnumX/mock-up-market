@@ -20,6 +20,7 @@ from app.data.kite_client import get_kite
 from app.data.providers.kite_provider import KiteProvider
 from app.data.providers.dummy_provider import DummyProvider
 from app.engine.registry import STRATEGIES
+from app.engine.position_sizing import build_sizer
 from app.live.broker import PaperBroker, KiteLiveBroker
 from app.live import store, risk
 from app.live.market_hours import is_market_open
@@ -72,7 +73,8 @@ def run_tick(db, session, kite):
 
     broker = _hydrate_broker(session, kite)
     StrategyClass = STRATEGIES[session["strategy"]]
-    strategy = StrategyClass(broker)
+    sizer = build_sizer(session.get("position_sizing"))
+    strategy = StrategyClass(broker, position_sizer=sizer)
     for k, v in session.get("strategy_state", {}).items():
         setattr(strategy, k, v)
     # Position state is the ground truth (safer than a possibly-stale flag).
@@ -90,7 +92,11 @@ def run_tick(db, session, kite):
             session["daily_realized_pnl"] = session.get("daily_realized_pnl", 0.0) + t["pnl"]
 
     session["bars"] = df.to_dict(orient="records")
-    session["strategy_state"] = {k: v for k, v in vars(strategy).items() if k != "broker"}
+    # position_sizer is rebuilt from session["position_sizing"] every tick
+    # (not BSON-serializable, and it's config, not evolving strategy state).
+    session["strategy_state"] = {
+        k: v for k, v in vars(strategy).items() if k not in ("broker", "position_sizer")
+    }
     session["cash"] = broker.capital
     session["positions"] = broker.positions
     session["history"] = broker.history

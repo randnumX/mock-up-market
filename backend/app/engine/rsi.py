@@ -1,4 +1,3 @@
-import math
 import pandas as pd
 from app.engine.strategy import Strategy
 
@@ -11,8 +10,8 @@ class RSIStrategy(Strategy):
     Sell signal: RSI crosses back below the overbought threshold (default 70)
     """
 
-    def __init__(self, broker, period=14, oversold=30, overbought=70):
-        super().__init__(broker)
+    def __init__(self, broker, period=14, oversold=30, overbought=70, position_sizer=None):
+        super().__init__(broker, position_sizer=position_sizer)
         self.period = period
         self.oversold = oversold
         self.overbought = overbought
@@ -58,7 +57,7 @@ class RSIStrategy(Strategy):
 
         # Buy: RSI crosses back up through the oversold threshold
         if rsi_prev < self.oversold <= rsi_curr and not self.bought:
-            quantity = math.floor(self.broker.capital / price)
+            quantity = self.quantity_for(price, df, i)
             if quantity > 0:
                 if self.buy(symbol, price, quantity, timestamp):
                     self.bought = True

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
+import TickerCombobox from './TickerCombobox'
+import PositionSizingControls from './PositionSizingControls'
 
 const isoDate = (d) => d.toISOString().slice(0, 10)
 
@@ -17,6 +19,7 @@ export default function ConfigPanel({ tickers, loading, onRun }) {
   const [strategy, setStrategy] = useState('macd')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [positionSizing, setPositionSizing] = useState({ mode: 'full' })
   const { strategies, fetchStrategies } = useStrategies()
 
   useEffect(() => {
@@ -44,6 +47,7 @@ export default function ConfigPanel({ tickers, loading, onRun }) {
       strategy,
       from_date: fromDate || undefined,
       to_date: toDate || undefined,
+      position_sizing: positionSizing.mode === 'full' ? undefined : positionSizing,
     })
   }
 
@@ -66,16 +70,11 @@ export default function ConfigPanel({ tickers, loading, onRun }) {
 
         <div className="form-group">
           <label className="form-label">Ticker</label>
-          <select
-            className="form-select"
+          <TickerCombobox
+            tickers={tickers}
             value={ticker || tickers[0] || ''}
-            onChange={(e) => setTicker(e.target.value)}
-            required
-          >
-            {tickers.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+            onChange={setTicker}
+          />
         </div>
 
         <div className="form-group">
@@ -127,6 +126,8 @@ export default function ConfigPanel({ tickers, loading, onRun }) {
           </div>
           <p className="form-hint">Leave blank to use all available history for the selected ticker.</p>
         </div>
+
+        <PositionSizingControls value={positionSizing} onChange={setPositionSizing} />
 
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? (

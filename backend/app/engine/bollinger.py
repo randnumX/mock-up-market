@@ -1,4 +1,3 @@
-import math
 import pandas as pd
 from app.engine.strategy import Strategy
 
@@ -11,8 +10,8 @@ class BollingerBandsStrategy(Strategy):
     Sell signal: price closes above the upper band, then closes back below it
     """
 
-    def __init__(self, broker, period=20, num_std=2):
-        super().__init__(broker)
+    def __init__(self, broker, period=20, num_std=2, position_sizer=None):
+        super().__init__(broker, position_sizer=position_sizer)
         self.period = period
         self.num_std = num_std
         self.bought = False
@@ -47,7 +46,7 @@ class BollingerBandsStrategy(Strategy):
 
         # Buy: price was below the lower band and has now closed back above it
         if self.was_below_lower and price >= lower and not self.bought:
-            quantity = math.floor(self.broker.capital / price)
+            quantity = self.quantity_for(price, df, i)
             if quantity > 0:
                 if self.buy(symbol, price, quantity, timestamp):
                     self.bought = True

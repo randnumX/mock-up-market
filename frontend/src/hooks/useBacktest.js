@@ -17,7 +17,7 @@ export function useBacktest() {
   const [error, setError] = useState(null)
   const esRef = useRef(null)
 
-  const runBacktest = useCallback(({ ticker, capital, strategy, from_date, to_date }) => {
+  const runBacktest = useCallback(({ ticker, capital, strategy, from_date, to_date, position_sizing }) => {
     esRef.current?.close()
 
     setLoading(true)
@@ -28,6 +28,12 @@ export function useBacktest() {
     const params = new URLSearchParams({ ticker, capital: String(Number(capital)), strategy })
     if (from_date) params.set('from_date', from_date)
     if (to_date) params.set('to_date', to_date)
+    if (position_sizing?.mode) {
+      params.set('sizing_mode', position_sizing.mode)
+      if (position_sizing.fraction !== undefined) params.set('sizing_fraction', position_sizing.fraction)
+      if (position_sizing.risk_per_trade !== undefined) params.set('sizing_risk_per_trade', position_sizing.risk_per_trade)
+      if (position_sizing.lookback !== undefined) params.set('sizing_lookback', position_sizing.lookback)
+    }
     const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
     esRef.current = es
 
@@ -108,6 +114,22 @@ export function useStrategies() {
   }, [])
 
   return { strategies, fetchStrategies }
+}
+
+export function usePositionSizingModes() {
+  const [modes, setModes] = useState([])
+
+  const fetchModes = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/position-sizing-modes`)
+      const data = await res.json()
+      setModes(data.modes || [])
+    } catch {
+      setModes([{ id: 'full', label: 'Full Capital' }])
+    }
+  }, [])
+
+  return { modes, fetchModes }
 }
 
 export function useKite() {

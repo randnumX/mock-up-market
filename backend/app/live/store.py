@@ -15,7 +15,8 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_session(db, ticker, strategy, mode, capital, max_capital_per_trade=None, daily_loss_limit=None):
+def create_session(db, ticker, strategy, mode, capital, max_capital_per_trade=None,
+                    daily_loss_limit=None, position_sizing=None):
     doc = {
         "_id": str(uuid.uuid4()),
         "ticker": ticker,
@@ -31,6 +32,9 @@ def create_session(db, ticker, strategy, mode, capital, max_capital_per_trade=No
         "total_taxes": 0.0,
         "max_capital_per_trade": max_capital_per_trade,
         "daily_loss_limit": daily_loss_limit,
+        # {"mode": "full"|"fixed_fraction"|"volatility_target", ...params} - see
+        # app/engine/position_sizing.py; None/omitted = full-capital (default)
+        "position_sizing": position_sizing,
         "daily_realized_pnl": 0.0,
         "daily_date": datetime.now(timezone.utc).date().isoformat(),
         "bars": [],

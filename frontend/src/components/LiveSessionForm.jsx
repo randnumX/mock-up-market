@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { FileText, TriangleAlert, Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
+import TickerCombobox from './TickerCombobox'
+import PositionSizingControls from './PositionSizingControls'
 
 export default function LiveSessionForm({ tickers, kiteConnected, onCreate, creating, error }) {
   const [ticker, setTicker] = useState('')
@@ -9,6 +11,7 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
   const [mode, setMode] = useState('paper')
   const [maxCapitalPerTrade, setMaxCapitalPerTrade] = useState(10000)
   const [dailyLossLimit, setDailyLossLimit] = useState(2000)
+  const [positionSizing, setPositionSizing] = useState({ mode: 'full' })
   const [confirmed, setConfirmed] = useState(false)
   const { strategies, fetchStrategies } = useStrategies()
 
@@ -25,6 +28,7 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
       mode,
       max_capital_per_trade: maxCapitalPerTrade ? Number(maxCapitalPerTrade) : null,
       daily_loss_limit: dailyLossLimit ? Number(dailyLossLimit) : null,
+      position_sizing: positionSizing.mode === 'full' ? undefined : positionSizing,
       confirm: isLive ? confirmed : undefined,
     })
     if (ok) setConfirmed(false)
@@ -56,9 +60,7 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
 
         <div className="form-group">
           <label className="form-label">Ticker</label>
-          <select className="form-select" value={ticker || tickers[0] || ''} onChange={(e) => setTicker(e.target.value)} required>
-            {tickers.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <TickerCombobox tickers={tickers} value={ticker || tickers[0] || ''} onChange={setTicker} />
         </div>
 
         <div className="form-group">
@@ -84,6 +86,8 @@ export default function LiveSessionForm({ tickers, kiteConnected, onCreate, crea
           <input type="number" className="form-input" value={dailyLossLimit} onChange={(e) => setDailyLossLimit(e.target.value)} min="0" step="500" />
           <p className="form-hint">Session auto-halts for the day once realized losses reach this amount.</p>
         </div>
+
+        <PositionSizingControls value={positionSizing} onChange={setPositionSizing} />
 
         {isLive && (
           <label className="confirm-row">

@@ -283,6 +283,70 @@ body {
   background: var(--bg-secondary);
 }
 
+/* ===== Ticker Combobox ===== */
+.ticker-combobox {
+  position: relative;
+}
+
+.ticker-combobox-input-wrap {
+  position: relative;
+}
+
+.ticker-combobox-input-wrap .form-input {
+  padding-right: 2.2rem;
+  cursor: text;
+}
+
+.ticker-combobox-chevron {
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ticker-combobox-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border-hover);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+}
+
+.ticker-combobox-option {
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ticker-combobox-option.highlighted {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.ticker-combobox-option.selected {
+  font-weight: 700;
+}
+
+.ticker-combobox-empty,
+.ticker-combobox-hint {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ===== Button ===== */
 .btn-primary {
   width: 100%;
@@ -388,6 +452,11 @@ body {
 .date-range-sep {
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/* ===== Position Sizing ===== */
+.sizing-param-row {
+  margin-top: 0.75rem;
 }
 
 /* ===== Kite Connect Card ===== */

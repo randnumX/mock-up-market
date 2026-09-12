@@ -15,12 +15,13 @@ Flask REST API with Blueprints pattern.
 - **API Routes** (`app/routes/`):
   - `health.py` — `GET /api/health` (per-provider availability, version)
   - `tickers.py` — `GET /api/tickers` (tickers merged across all available providers)
-  - `backtest.py` — `POST /api/backtest` (runs engine, returns JSON results) and `GET /api/backtest/stream` (SSE version); both accept optional `from_date`/`to_date` (ISO, inclusive) to restrict the backtest window, validated in `_prepare_run()`; `GET /api/strategies`
+  - `backtest.py` — `POST /api/backtest` (runs engine, returns JSON results) and `GET /api/backtest/stream` (SSE version); both accept optional `from_date`/`to_date` (ISO, inclusive) to restrict the backtest window and an optional `position_sizing` object, validated in `_prepare_run()`; `GET /api/strategies`; `GET /api/position-sizing-modes`
   - `kite.py` — `/api/kite/*` (login-url, callback, status, disconnect, sync)
   - `live.py` — `/api/live/*` (create/list/get/stop session, kill-all, market-status)
 - **Engine** (`app/engine/`):
-  - `strategy.py` — Base event-driven strategy class
-  - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py` — four pluggable strategy implementations, all registered in `routes/backtest.py`'s `STRATEGIES` dict
+  - `strategy.py` — Base event-driven strategy class; `__init__(self, broker, position_sizer=None)` stores a `PositionSizer` (defaults to `FullCapitalSizer`), and `quantity_for(price, df, i)` is what subclasses call instead of computing share count inline
+  - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py` — four pluggable strategy implementations, all registered in `routes/backtest.py`'s `STRATEGIES` dict; all forward `position_sizer` to `super().__init__()`
+  - `position_sizing.py` — pluggable position sizing: `FullCapitalSizer` (default, bets everything), `FixedFractionSizer(fraction)`, `VolatilityTargetSizer(risk_per_trade, lookback)` (sizes from recent return volatility); `build_sizer(config)` constructs one from a `{"mode": ..., ...params}` dict (raises `ValueError` on an unknown mode) and is used by both the backtest route and the live engine so sizing works identically in both
   - `backtester.py` — BacktestRunner with equity curve, max drawdown, win rate
   - `broker.py` — SimulatedBroker with tax-aware trade execution
 - **Utils** (`app/utils/`):
@@ -34,10 +35,11 @@ Flask REST API with Blueprints pattern.
   - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history` [accepts `from_date`/`to_date` ISO strings to restrict the range, in addition to `days`], `get_latest_price`); `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`. **Routes never import Mongo or Kite directly** — only the registry. Adding a new data source means writing one `DataProvider` subclass and adding it to `build_providers()`. `priceDate` is stored/returned as an ISO `"YYYY-MM-DD"` string by every provider (never a datetime object) so date-range filtering is a plain lexicographic comparison everywhere, including in Mongo queries.
 - **Live Trading** (`app/live/`):
   - `broker.py` — `PaperBroker` (subclasses `SimulatedBroker`, virtual money) and `KiteLiveBroker` (real orders via Kite's Order API); both share the same `place_order(...)` signature the `Strategy` classes already call, and both accept an optional `max_capital_per_trade` cap
-  - `engine.py` — `run_tick()` advances one session by one price tick (fetch latest price → append to persisted bar history → `strategy.on_bar()` → persist); `start_scheduler()` runs an APScheduler job every `LIVE_POLL_INTERVAL_SECONDS` calling this for every `status="running"` session. Strategy indicator state (EMA/RSI/SMA/Bollinger columns, and flags like `bought`) round-trips through Mongo every tick so a session resumes correctly after a restart
-  - `store.py` — Mongo CRUD for the `LiveSessions` collection (session state must survive restarts - this is why live trading has no dummy-data-only mode, unlike backtesting)
+  - `engine.py` — `run_tick()` advances one session by one price tick (fetch latest price → append to persisted bar history → `strategy.on_bar()` → persist); `start_scheduler()` runs an APScheduler job every `LIVE_POLL_INTERVAL_SECONDS` calling this for every `status="running"` session. Strategy indicator state (EMA/RSI/SMA/Bollinger columns, and flags like `bought`) round-trips through Mongo every tick so a session resumes correctly after a restart. `position_sizer` is rebuilt from `session["position_sizing"]` via `build_sizer()` every tick rather than persisted through the generic state dict — it's config, not evolving state, and isn't BSON-serializable
+  - `store.py` — Mongo CRUD for the `LiveSessions` collection (session state must survive restarts - this is why live trading has no dummy-data-only mode, unlike backtesting); `create_session(...)` accepts an optional `position_sizing` dict alongside `max_capital_per_trade`/`daily_loss_limit`
   - `risk.py` — pure, DB-free risk checks (`check_daily_loss_limit`, `check_capital_exhausted`, `rollover_daily_pnl`) the engine consults every tick
-  - `market_hours.py` — NSE hours gate (9:15-15:30 IST, Mon-Fri); only enforced once a real Kite price feed is involved, so a paper session on the simulated feed can demo continuously
+  - `market_hours.py` — NSE hours + published-holiday gate (9:15-15:30 IST, Mon-Fri, minus `nse_holidays.py`'s dates); only enforced once a real Kite price feed is involved, so a paper session on the simulated feed can demo continuously
+  - `nse_holidays.py` — hardcoded NSE trading-holiday dates (2025-2026, cross-checked against two independent sources); needs a manual yearly update, degrades gracefully (weekday+hours only) for any year not listed
 
 ### Frontend (`frontend/`)
 Vite + React single-page application.

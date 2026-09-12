@@ -1,4 +1,3 @@
-import math
 import pandas as pd
 from app.engine.strategy import Strategy
 
@@ -11,8 +10,8 @@ class SMACrossoverStrategy(Strategy):
     Sell signal: fast SMA crosses below slow SMA
     """
 
-    def __init__(self, broker, fast_period=20, slow_period=50):
-        super().__init__(broker)
+    def __init__(self, broker, fast_period=20, slow_period=50, position_sizer=None):
+        super().__init__(broker, position_sizer=position_sizer)
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.bought = False
@@ -41,7 +40,7 @@ class SMACrossoverStrategy(Strategy):
 
         # Buy: fast SMA crosses above slow SMA
         if fast_curr > slow_curr and fast_prev <= slow_prev and not self.bought:
-            quantity = math.floor(self.broker.capital / price)
+            quantity = self.quantity_for(price, df, i)
             if quantity > 0:
                 if self.buy(symbol, price, quantity, timestamp):
                     self.bought = True

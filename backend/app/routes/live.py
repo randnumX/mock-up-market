@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.data.db import get_db
 from app.data.kite_client import is_connected as kite_connected
 from app.engine.registry import STRATEGIES
+from app.engine.position_sizing import build_sizer
 from app.live import store
 from app.live.engine import summarize_session
 from app.live.market_hours import is_market_open
@@ -45,6 +46,7 @@ def create_session():
     capital = req.get("capital")
     max_capital_per_trade = req.get("max_capital_per_trade")
     daily_loss_limit = req.get("daily_loss_limit")
+    position_sizing = req.get("position_sizing")
     confirm = req.get("confirm", False)
 
     if not ticker or not strategy:
@@ -58,6 +60,10 @@ def create_session():
         assert capital > 0
     except (TypeError, ValueError, AssertionError):
         return jsonify({"error": "capital must be a positive number"}), 400
+    try:
+        build_sizer(position_sizing)  # validates mode/params up front, same object discarded
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": str(e)}), 400
 
     if mode == "live":
         if not kite_connected():
@@ -72,7 +78,9 @@ def create_session():
     if daily_loss_limit is not None:
         daily_loss_limit = float(daily_loss_limit)
 
-    session = store.create_session(db, ticker, strategy, mode, capital, max_capital_per_trade, daily_loss_limit)
+    session = store.create_session(
+        db, ticker, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing
+    )
     return jsonify(summarize_session(session)), 201
 
 
