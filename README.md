@@ -101,6 +101,7 @@ mock-up-market/
 | GET | `/api/tickers` | Available stock tickers, merged across active providers |
 | GET | `/api/strategies` | List of available strategies with descriptions |
 | POST | `/api/backtest` | Run a backtest (body: `{ticker, capital, strategy, source?}`) |
+| GET | `/api/backtest/stream` | Same backtest as an SSE stream (query params) - one `tick` event per bar, then a `done` event with the identical result shape |
 | GET | `/api/kite/status` | Whether Kite Connect is configured/connected |
 | GET | `/api/kite/login-url` | Zerodha hosted login URL |
 | GET | `/api/kite/callback` | OAuth redirect target (exchanges request_token) |

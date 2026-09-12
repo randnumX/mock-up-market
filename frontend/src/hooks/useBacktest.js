@@ -1,39 +1,60 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 const API_BASE = '/api'
 
+/**
+ * Runs a backtest via Server-Sent Events (GET /api/backtest/stream) so the
+ * equity curve renders bar-by-bar as it's computed, instead of popping in
+ * all at once when a full response lands. `results` grows in place during
+ * a run (`results.streaming === true`) and is replaced by the final,
+ * authoritative result (identical shape to the plain POST /api/backtest
+ * endpoint) once the "done" event arrives.
+ */
 export function useBacktest() {
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
+  const esRef = useRef(null)
 
-  const runBacktest = useCallback(async ({ ticker, capital, strategy }) => {
+  const runBacktest = useCallback(({ ticker, capital, strategy }) => {
+    esRef.current?.close()
+
     setLoading(true)
     setError(null)
+    setProgress(0)
+    setResults({ ticker, strategy, equity_curve: [], trades: [], streaming: true })
 
-    try {
-      const res = await fetch(`${API_BASE}/backtest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, capital: Number(capital), strategy }),
-      })
+    const params = new URLSearchParams({ ticker, capital: String(Number(capital)), strategy })
+    const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
+    esRef.current = es
 
-      const data = await res.json()
+    es.onmessage = (msg) => {
+      const event = JSON.parse(msg.data)
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Backtest failed')
+      if (event.type === 'tick') {
+        setProgress(Math.round(((event.index + 1) / event.total) * 100))
+        setResults((prev) => ({
+          ...prev,
+          equity_curve: [...(prev?.equity_curve || []), event.point],
+          trades: event.new_trades.length ? [...(prev?.trades || []), ...event.new_trades] : prev?.trades || [],
+        }))
+      } else if (event.type === 'done') {
+        setResults({ ...event.result, streaming: false })
+        setProgress(100)
+        setLoading(false)
+        es.close()
       }
+    }
 
-      setResults(data)
-    } catch (err) {
-      setError(err.message)
-      setResults(null)
-    } finally {
+    es.onerror = () => {
+      setError('Lost connection to the backtest stream')
       setLoading(false)
+      es.close()
     }
   }, [])
 
-  return { results, loading, error, runBacktest }
+  return { results, loading, progress, error, runBacktest }
 }
 
 export function useTickers() {

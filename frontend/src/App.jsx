@@ -12,7 +12,7 @@ import { useBacktest, useTickers, useHealth } from './hooks/useBacktest'
 
 export default function App() {
   const [view, setView] = useState('backtest')
-  const { results, loading, error, runBacktest } = useBacktest()
+  const { results, loading, progress, error, runBacktest } = useBacktest()
   const { tickers, fetchTickers } = useTickers()
   const { health, fetchHealth } = useHealth()
 
@@ -66,7 +66,7 @@ export default function App() {
 
             {/* Right Main Area */}
             <div className="right-panel">
-              <MetricsGrid results={results} />
+              <MetricsGrid results={results} progress={progress} />
               <EquityChart results={results} />
               <TradeLog results={results} />
             </div>

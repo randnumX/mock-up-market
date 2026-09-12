@@ -5,6 +5,10 @@ class BacktestRunner:
     """
     Feeds historical data into a Strategy bar-by-bar and collects
     an equity curve + trade history for the frontend to display.
+
+    run() and run_streaming() both drive the same _step()/_finalize()
+    logic so the two never drift - streaming exists purely to let the
+    frontend render progress live, not to duplicate the backtest math.
     """
 
     def __init__(self, broker, strategy):
@@ -19,27 +23,29 @@ class BacktestRunner:
             self.data.sort_values(by=["priceDate"], inplace=True)
         self.data.reset_index(drop=True, inplace=True)
 
-    def run(self):
-        equity_curve = []
+    def _step(self, i):
+        """Advance the strategy by one bar. Returns (equity_point, new_trades)."""
+        trades_before = len(self.broker.history)
+        self.strategy.on_bar(self.data, i)
+        new_trades = self.broker.history[trades_before:]
 
-        for i in range(len(self.data)):
-            self.strategy.on_bar(self.data, i)
+        timestamp = self.data.loc[i, "priceDate"]
+        current_price = self.data.loc[i, "Value"]
+        symbol = self.data.loc[i].get("scripName", self.data.loc[i].get("Security Id", "UNKNOWN"))
 
-            timestamp = self.data.loc[i, "priceDate"]
-            current_price = self.data.loc[i, "Value"]
-            symbol = self.data.loc[i].get("scripName", self.data.loc[i].get("Security Id", "UNKNOWN"))
+        # Calculate total portfolio equity (cash + holdings at current price)
+        equity = self.broker.capital
+        pos = self.broker.positions.get(symbol, {"qty": 0})
+        equity += pos["qty"] * current_price
 
-            # Calculate total portfolio equity (cash + holdings at current price)
-            equity = self.broker.capital
-            pos = self.broker.positions.get(symbol, {"qty": 0})
-            equity += pos["qty"] * current_price
+        point = {
+            "time": str(timestamp),
+            "equity": round(equity, 2),
+            "price": round(current_price, 2),
+        }
+        return point, new_trades
 
-            equity_curve.append({
-                "time": str(timestamp),
-                "equity": round(equity, 2),
-                "price": round(current_price, 2),
-            })
-
+    def _finalize(self, equity_curve):
         # Mark any still-open position to the last traded price so a strategy
         # that ends the backtest mid-trade isn't scored as if those shares
         # evaporated - final equity is cash + market value of open holdings.
@@ -47,15 +53,15 @@ class BacktestRunner:
         open_position_value = sum(pos["qty"] * last_price for pos in self.broker.positions.values())
         final_equity = self.broker.capital + open_position_value
 
-        roi = ((final_equity - self.broker.initial_capital) / self.broker.initial_capital) * 100
+        roi = ((final_equity - self.broker.initial_capital) / self.broker.initial_capital) * 100 if self.broker.initial_capital else 0
 
         # Calculate max drawdown
-        peak = equity_curve[0]["equity"]
+        peak = equity_curve[0]["equity"] if equity_curve else 0
         max_dd = 0
         for point in equity_curve:
             if point["equity"] > peak:
                 peak = point["equity"]
-            dd = (peak - point["equity"]) / peak * 100
+            dd = (peak - point["equity"]) / peak * 100 if peak else 0
             if dd > max_dd:
                 max_dd = dd
 
@@ -77,3 +83,24 @@ class BacktestRunner:
             "trades": self.broker.history,
             "equity_curve": equity_curve,
         }
+
+    def run(self):
+        equity_curve = []
+        for i in range(len(self.data)):
+            point, _ = self._step(i)
+            equity_curve.append(point)
+        return self._finalize(equity_curve)
+
+    def run_streaming(self):
+        """
+        Generator yielding one {"type": "tick", ...} event per bar, then a
+        final {"type": "done", "result": ...} event with the exact same
+        result shape run() returns.
+        """
+        equity_curve = []
+        total = len(self.data)
+        for i in range(total):
+            point, new_trades = self._step(i)
+            equity_curve.append(point)
+            yield {"type": "tick", "index": i, "total": total, "point": point, "new_trades": new_trades}
+        yield {"type": "done", "result": self._finalize(equity_curve)}
