@@ -57,5 +57,10 @@ Vite + React single-page application.
 - **Event-driven strategy**: Base `Strategy` class allows pluggable algorithms; four are currently registered (MACD, RSI, SMA Crossover, Bollinger Bands)
 - **Tested**: `backend/tests/` (pytest) covers taxes, broker, all four strategies end-to-end, and provider availability/fallback behavior
 
+### Deployment
+- `docker-compose.yml` — `mongo` has no profile (always available via plain `docker compose up -d`, for local hybrid dev); `backend`/`frontend` are tagged `profiles: ["full"]`, opt-in via `docker compose --profile full up --build`, so the two workflows coexist without either breaking the other
+- `backend/Dockerfile` — runs `gunicorn --workers 1 --threads 4`. The single-worker count is load-bearing, not a default left unconsidered: `app/live/engine.py`'s scheduler is an in-process singleton, and >1 worker would each run their own copy and multiply every live session's trades
+- `frontend/Dockerfile` — multi-stage (Vite build → nginx); `frontend/nginx.conf` proxies `/api/*` to the backend container with `proxy_buffering off` so the SSE backtest stream (`/api/backtest/stream`) actually streams through nginx instead of arriving all at once
+
 ### Legacy Code
 `AlgoTrading/` (original scripts) and `api/` (original Flask stub) have been removed — both were explicitly superseded by `backend/` and fully duplicated by `app/engine/` + the providers layer. If reference material from them is ever needed again, it's recoverable from git history prior to their removal.

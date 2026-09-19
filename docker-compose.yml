@@ -13,5 +13,41 @@ services:
       timeout: 5s
       retries: 5
 
+  # `backend` and `frontend` are opt-in via the "full" profile so the default
+  # `docker compose up -d` behavior (just Mongo, for local hybrid dev with
+  # `python run.py` / `npm run dev` run natively) is unchanged. Run the whole
+  # app containerized with:
+  #   docker compose --profile full up --build -d
+  backend:
+    build: ./backend
+    container_name: mock-up-market-backend
+    profiles: ["full"]
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      DB_NAME: ${DB_NAME:-AlgoTradingSource}
+      FLASK_PORT: 5000
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-this-in-production}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      KITE_API_KEY: ${KITE_API_KEY:-}
+      KITE_API_SECRET: ${KITE_API_SECRET:-}
+      KITE_REDIRECT_URL: ${KITE_REDIRECT_URL:-http://localhost:5000/api/kite/callback}
+      KITE_FRONTEND_URL: ${KITE_FRONTEND_URL:-http://localhost:3000}
+
+  frontend:
+    build: ./frontend
+    container_name: mock-up-market-frontend
+    profiles: ["full"]
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
 volumes:
   mongo_data:

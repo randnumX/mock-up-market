@@ -41,6 +41,22 @@ docker compose down       # stops it (add -v to also wipe stored data)
 
 `backend/.env` already points at it (`MONGO_URI=mongodb://localhost:27017`) — no other config needed. Check `GET /api/health` for `"db_connected": true` once it's up.
 
+## Full Docker Deployment (backend + frontend + Mongo)
+
+To run the *entire* app containerized instead of `python run.py` / `npm run dev` natively, use the `full` profile — this builds a production image for each service (backend served via gunicorn, frontend built and served via nginx with `/api/*` proxied to the backend, mirroring the Vite dev proxy) instead of touching your local Python/Node setup at all:
+
+```bash
+docker compose --profile full up --build -d
+# Dashboard: http://localhost:3000   API: http://localhost:5000
+docker compose --profile full down     # stop everything (add -v to also wipe Mongo data)
+```
+
+Plain `docker compose up -d` (no `--profile full`) still only starts Mongo, unchanged — the two modes coexist, pick whichever fits what you're doing.
+
+Two things worth knowing about the containerized backend:
+- It runs with `gunicorn --workers 1` **deliberately, not as an oversight** — the live-trading scheduler (`app/live/engine.py`) is an in-process singleton; more than one worker would each run their own copy and tick every live session multiple times. `--threads 4` still gives it request concurrency without that problem. Scale horizontally (multiple containers behind a load balancer) rather than via `--workers` if you need more throughput.
+- Kite Connect credentials, if you have them, pass through via host environment variables (`KITE_API_KEY`, `KITE_API_SECRET`, etc. — see `docker-compose.yml`); nothing is baked into the image.
+
 ## Real Market Data (Zerodha Kite Connect)
 
 1. Create an app at [developers.kite.trade](https://developers.kite.trade/apps) (₹2000/month subscription). Set its **Redirect URL** to `http://localhost:5000/api/kite/callback`.
