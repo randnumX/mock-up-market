@@ -41,21 +41,21 @@ export default function EquityChart({ results }) {
     const chart = createChart(chartRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#c65b7c',
+        textColor: '#ab9fa6',
         fontSize: 12,
         fontFamily: 'Inter, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(249,173,160,0.05)' },
-        horzLines: { color: 'rgba(249,173,160,0.05)' },
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
       crosshair: {
         mode: 0,
         vertLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
         horzLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
       },
-      rightPriceScale: { borderColor: 'rgba(249,173,160,0.12)' },
-      timeScale: { borderColor: 'rgba(249,173,160,0.12)', timeVisible: false },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
+      timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: false },
       handleScroll: true,
       handleScale: true,
     })

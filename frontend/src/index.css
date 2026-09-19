@@ -15,8 +15,8 @@
   --bg-secondary: #211320;
   --bg-card: rgba(91, 55, 88, 0.45);
   --bg-card-hover: rgba(91, 55, 88, 0.65);
-  --glass-border: rgba(249, 173, 160, 0.12);
-  --glass-border-hover: rgba(249, 173, 160, 0.24);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.16);
 
   --accent: var(--muted-teal);
   --accent-dim: rgba(131, 182, 146, 0.16);
@@ -30,9 +30,11 @@
   --warning: var(--blush-rose);
   --warning-dim: rgba(198, 91, 124, 0.16);
 
-  --text-primary: var(--powder-blush);
-  --text-secondary: var(--blush-rose);
-  --text-muted: rgba(198, 91, 124, 0.62);
+  /* Body text stays neutral - the brand palette is for accents (buttons,
+     gain/loss, highlights), not for every line of copy on the page. */
+  --text-primary: #f1edf0;
+  --text-secondary: #ab9fa6;
+  --text-muted: #6f6369;
 
   --radius-sm: 8px;
   --radius-md: 12px;
