@@ -3,65 +3,76 @@ description: Provides the current architectural context and overview of the auto
 ---
 # Project Context: Mock-Up Market (Automated Trading Engine)
 
-An automated algorithmic trading engine for the Indian stock market (NSE) with backtesting, tax-aware profit calculation, real market data via Zerodha Kite Connect, and a premium real-time dashboard.
+An automated algorithmic trading engine for the Indian stock market (NSE) with multi-ticker/intraday backtesting, tax-aware profit calculation (incl. shorts), real market data + a live WebSocket feed via Zerodha Kite Connect, unattended live trading, a signal scanner, and a premium real-time dashboard.
 
-## Current Architecture (v2.1)
+## Current Architecture (v3.0)
 
 ### Backend (`backend/`)
-Flask REST API with Blueprints pattern.
+Flask REST API with Blueprints pattern. Dependencies managed with `uv` (`pyproject.toml` + committed `uv.lock` — no `requirements.txt`, no manual venv activation; `uv run <cmd>` / `uv sync` everywhere).
 
-- **Entry Point**: `run.py` → loads `.env` via `python-dotenv`, creates Flask app via factory
-- **Config**: `app/config.py` — reads all settings from environment variables (incl. Kite Connect credentials)
+- **Entry Point**: `run.py` → loads `.env` via `python-dotenv`, creates Flask app via factory. On boot, `app/__init__.py` starts three background services (live scheduler, WebSocket ticker thread, scanner scheduler), each guarded against Flask's debug-reloader double-start via `WERKZEUG_RUN_MAIN`
+- **Config**: `app/config.py` — reads all settings from environment variables, incl. `KITE_ALLOW` (master kill-switch: gates all real Kite/WebSocket usage regardless of whether credentials are present) and `LIVE_POLL_INTERVAL_SECONDS`/`LIVE_IGNORE_MARKET_HOURS`
 - **API Routes** (`app/routes/`):
   - `health.py` — `GET /api/health` (per-provider availability, version)
-  - `tickers.py` — `GET /api/tickers` (tickers merged across all available providers)
-  - `backtest.py` — `POST /api/backtest` (runs engine, returns JSON results) and `GET /api/backtest/stream` (SSE version); both accept optional `from_date`/`to_date` (ISO, inclusive) to restrict the backtest window and an optional `position_sizing` object, validated in `_prepare_run()`; `GET /api/strategies`; `GET /api/position-sizing-modes`
-  - `kite.py` — `/api/kite/*` (login-url, callback, status, disconnect, sync)
-  - `live.py` — `/api/live/*` (create/list/get/stop session, kill-all, market-status)
+  - `tickers.py` — `GET /api/tickers` (merged across providers, resolves company names via Kite's instrument dump when connected); `GET /api/tickers/<symbol>/history` (up to 300 recent bars for the ticker detail modal)
+  - `backtest.py` — `POST /api/backtest` / `GET /api/backtest/stream` (SSE): accepts a comma-separated `ticker` string or `tickers` array (multi-ticker portfolio backtests), `interval`, `position_sizing`, `max_capital_per_trade`, `daily_loss_limit`, `from_date`/`to_date`. `_prepare_run()` fetches every ticker's history in parallel (`ThreadPoolExecutor`) and loads them all into one `BacktestRunner`. Validation order matters: tickers/strategy → dates → capital, so a malformed-date request is rejected as a date error even without `capital` set. `GET /api/strategies`; `GET /api/position-sizing-modes`
+  - `kite.py` — `/api/kite/*` (login-url, callback, status, disconnect, sync — sync runs in a background thread, progress broadcast over `/api/stream`)
+  - `live.py` — `/api/live/*` (create/list/get/stop/**delete** session — delete requires the session to already be stopped/halted; kill-all; market-status)
+  - `stream.py` — `GET /api/stream`: shared SSE endpoint (queue-per-client pub/sub) carrying both live WebSocket price ticks and Kite-sync progress events
+  - `scanner.py` — `GET`/`POST /api/scanner`: configure/read the background signal scanner
+  - `movers.py` — `GET /api/movers`: top gainers/losers/volume, computed from the two most recent daily-interval dates in Mongo
 - **Engine** (`app/engine/`):
   - `strategy.py` — Base event-driven strategy class; `__init__(self, broker, position_sizer=None)` stores a `PositionSizer` (defaults to `FullCapitalSizer`), and `quantity_for(price, df, i)` is what subclasses call instead of computing share count inline
-  - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py` — four pluggable strategy implementations, all registered in `routes/backtest.py`'s `STRATEGIES` dict; all forward `position_sizer` to `super().__init__()`
-  - `position_sizing.py` — pluggable position sizing: `FullCapitalSizer` (default, bets everything), `FixedFractionSizer(fraction)`, `VolatilityTargetSizer(risk_per_trade, lookback)` (sizes from recent return volatility); `build_sizer(config)` constructs one from a `{"mode": ..., ...params}` dict (raises `ValueError` on an unknown mode) and is used by both the backtest route and the live engine so sizing works identically in both
-  - `backtester.py` — BacktestRunner with equity curve, max drawdown, win rate
-  - `broker.py` — SimulatedBroker with tax-aware trade execution
+  - `macd.py`, `rsi.py`, `sma_crossover.py`, `bollinger.py`, `vwap.py`, `orb.py`, `rsi_scalp.py`, `ema_scalp.py` — eight pluggable strategy implementations, all registered in `registry.py`'s `STRATEGIES`/`STRATEGY_META`, all forward `position_sizer` to `super().__init__()`. `ORBStrategy` explicitly opens shorts on a breakdown below the opening range and covers them later — this only works because of the broker-level short support below
+  - `position_sizing.py` — pluggable position sizing: `FullCapitalSizer` (default), `FixedFractionSizer(fraction)`, `VolatilityTargetSizer(risk_per_trade, lookback)`; `build_sizer(config)` constructs one from a `{"mode": ..., ...params}` dict, used identically by the backtest route and the live engine
+  - `backtester.py` — `BacktestRunner(broker, strategy_class, position_sizer=None, daily_loss_limit=None)`. Takes a strategy **class**, not an instance — it instantiates one strategy per ticker internally (`_build_timeline`). `load_data(ticker, df)` is keyed by ticker; `_build_timeline()` merges every loaded ticker's bars into one chronological event list so a portfolio backtest processes cross-ticker signals in true time order. `_step()` implements the daily-loss circuit breaker via `start_of_day_equity` tracking. `_finalize()` builds both the portfolio-level result and a per-ticker `ticker_stats` breakdown (trade count, win rate, realized P&L, price series)
+  - `broker.py` — `SimulatedBroker`: tax-aware trade execution, an optional `max_capital_per_trade` clamp on BUY orders, and **short-selling**: a `SELL` with no existing long position opens/grows a short (`_open_or_add_short`), and a subsequent `BUY` covers it tax-aware (`_cover_short`) via the same order-agnostic `calculate_taxes()`. `get_portfolio_value`/`_finalize`'s unrealized-PnL math work unmodified for negative (short) quantities
 - **Utils** (`app/utils/`):
-  - `taxes.py` — Indian equity tax calculator (STT, GST, SEBI, Stamp Duty)
+  - `taxes.py` — Indian equity tax calculator (STT, GST, SEBI, Stamp Duty); `calculate_taxes(buy_price, sell_price, quantity)` is order-agnostic, so it's reused as-is for covering a short (buy leg happens after the sell leg)
   - `dummy_data.py` — Generates realistic synthetic stock data via Geometric Brownian Motion
 - **Data** (`app/data/`):
   - `db.py` — MongoDB connection helper with graceful fallback
-  - `kite_client.py` — Kite Connect session lifecycle (login URL, token exchange, daily session persisted to `backend/.kite_session.json`, gitignored)
-  - `kite_ingest.py` — Resolves NSE instrument tokens and fetches/upserts historical candles into Mongo
-  - `scripts/fetch_bse_data.py` — Alternative data loader with no broker account needed: pulls daily history from BSE's undocumented `StockReachGraph` endpoint for every ticker in `backend/Equity.csv` (the official active-equity list). Resumable (skips already-loaded tickers). `flag=12M` is enforced as the max - BSE silently returns intraday ticks instead of more history above that, confirmed by direct testing (see the script's docstring)
-  - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history` [accepts `from_date`/`to_date` ISO strings to restrict the range, in addition to `days`], `get_latest_price`); `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`. **Routes never import Mongo or Kite directly** — only the registry. Adding a new data source means writing one `DataProvider` subclass and adding it to `build_providers()`. `priceDate` is stored/returned as an ISO `"YYYY-MM-DD"` string by every provider (never a datetime object) so date-range filtering is a plain lexicographic comparison everywhere, including in Mongo queries.
+  - `kite_client.py` — Kite Connect session lifecycle; `is_configured()` checks `KITE_ALLOW` first (kill-switch), then credentials
+  - `kite_ingest.py` — Resolves NSE instrument tokens, fetches/upserts historical OHLCV candles (real Open/High/Low, not just close) into Mongo per ticker+interval, with "smart sync" (only fetches forward from the last stored date) and Kite's intraday history caps (100 days most intervals, 60 for `minute`)
+  - `scripts/fetch_bse_data.py` — Alternative data loader with no broker account needed: pulls daily history from BSE's undocumented `StockReachGraph` endpoint for every ticker in `backend/Equity.csv`. Resumable. `flag=12M` enforced as the max
+  - `providers/` — **the plug-and-switch data-source abstraction.** `base.py` defines `DataProvider` (`is_available`, `get_tickers`, `get_history(ticker, days, from_date, to_date, interval="day")`, `get_latest_price`) — **every provider must accept `interval`**, even `DummyProvider` (accepted, ignored — synthetic data is always daily). `kite_provider.py`, `mongo_provider.py`, `dummy_provider.py` implement it; `registry.py` builds the provider list and exposes `get_history_with_fallback()` / `get_provider()`, calling every provider's `get_history` with the same signature (no duck-typing/`inspect.signature` workaround — removed once all three providers matched the interface). `priceDate` is `"YYYY-MM-DD"` for daily bars, `"YYYY-MM-DD HH:MM:SS"` for intraday, consistently across ingest and every provider. `KiteProvider.get_history` returns real Open/High/Low (needed by VWAP/ORB) and honors `interval`, mirroring `kite_ingest`'s caps
 - **Live Trading** (`app/live/`):
-  - `broker.py` — `PaperBroker` (subclasses `SimulatedBroker`, virtual money) and `KiteLiveBroker` (real orders via Kite's Order API); both share the same `place_order(...)` signature the `Strategy` classes already call, and both accept an optional `max_capital_per_trade` cap
-  - `engine.py` — `run_tick()` advances one session by one price tick (fetch latest price → append to persisted bar history → `strategy.on_bar()` → persist); `start_scheduler()` runs an APScheduler job every `LIVE_POLL_INTERVAL_SECONDS` calling this for every `status="running"` session. Strategy indicator state (EMA/RSI/SMA/Bollinger columns, and flags like `bought`) round-trips through Mongo every tick so a session resumes correctly after a restart. `position_sizer` is rebuilt from `session["position_sizing"]` via `build_sizer()` every tick rather than persisted through the generic state dict — it's config, not evolving state, and isn't BSON-serializable
-  - `store.py` — Mongo CRUD for the `LiveSessions` collection (session state must survive restarts - this is why live trading has no dummy-data-only mode, unlike backtesting); `create_session(...)` accepts an optional `position_sizing` dict alongside `max_capital_per_trade`/`daily_loss_limit`
-  - `risk.py` — pure, DB-free risk checks (`check_daily_loss_limit`, `check_capital_exhausted`, `rollover_daily_pnl`) the engine consults every tick
-  - `market_hours.py` — NSE hours + published-holiday gate (9:15-15:30 IST, Mon-Fri, minus `nse_holidays.py`'s dates); only enforced once a real Kite price feed is involved, so a paper session on the simulated feed can demo continuously
-  - `nse_holidays.py` — hardcoded NSE trading-holiday dates (2025-2026, cross-checked against two independent sources); needs a manual yearly update, degrades gracefully (weekday+hours only) for any year not listed
+  - `broker.py` — `PaperBroker` (subclasses `SimulatedBroker` directly — virtual money, gets short-selling for free) and `KiteLiveBroker` (real orders via Kite's Order API, deliberately long-only: a SELL is clamped to existing position size, so a strategy's short signal safely no-ops in live mode instead of risking an unmodeled real short)
+  - `engine.py` — `run_tick()` advances one session by one price tick; resamples ticks into OHLCV bars via pandas when `session["interval"] != "day"`. `start_scheduler()` runs an APScheduler job every `LIVE_POLL_INTERVAL_SECONDS` for every `status="running"` session; `_tick_all_sessions()` also subscribes the WebSocket ticker to every active session's symbol
+  - `ticker.py` — background thread wrapping Kite's `KiteTicker` WebSocket (only runs when `is_configured()` and `KITE_ALLOW`); maintains an in-memory `PRICE_CACHE`, broadcasts ticks over the shared SSE pub/sub (`_clients`/`_broadcast`) also used for Kite-sync progress. `KiteProvider.get_latest_price` checks this cache before falling back to a Kite LTP REST call
+  - `scanner.py` — separate `BackgroundScheduler` running a chosen strategy over a watchlist via a broker that never places real orders, purely to surface BUY signals (`routes/scanner.py`)
+  - `store.py` — Mongo CRUD for the `LiveSessions` collection; `create_session(...)` takes `interval`; `delete_session(...)` permanently removes a session document (routes enforce it's already stopped/halted first — `stop_session`/`stop_all_sessions` only ever flip a status flag, they never delete)
+  - `risk.py` — pure, DB-free risk checks the engine consults every tick
+  - `market_hours.py` / `nse_holidays.py` — NSE hours + published-holiday gate, only enforced once a real Kite price feed is involved
 
 ### Frontend (`frontend/`)
-Vite + React single-page application.
+Vite + React single-page application. View switcher: Backtest / Live Trading / Scanner / Movers, plus a global `TickerModal`.
 
-- **Components**: Header, StatusBadge, ConfigPanel, KiteConnect, MetricsGrid, EquityChart (TradingView lightweight-charts), TradeLog
-- **Hooks**: `useBacktest`, `useTickers`, `useHealth`, `useStrategies`, `useKite`
-- **Design**: Premium dark mode with glassmorphism, Inter font, CSS custom properties. Color tokens (`frontend/src/index.css` `:root`) follow finance-standard convention on purpose: `--positive`/`--negative` are true green/red (non-negotiable in this domain), `--accent` is a blue distinct from both so UI chrome is never mistaken for a P&L signal, body text/backgrounds are neutral slate grays
+- **Components**: `ConfigPanel` (multi-ticker free-text input, interval/position-sizing/risk-cap controls), `KiteConnect` (live sync log over SSE), `MetricsGrid`/`EquityChart`/`TradeLog` (all `drilldownTicker`-aware, switching between portfolio and single-ticker views), `LiveTrading`/`LiveSessionForm`/`LiveSessionsList`, `Scanner`, `Movers`, `TickerModal`, `ThemeToggle`
+- **Hooks**: `useBacktest` (owns `resultsList` — every run's result *and* the `config` used to produce it, persisted to `localStorage`; `deleteResult`/`clearArchivedResults`; reconciles any `status: 'streaming'` entry found on load to an error state, since its `EventSource` doesn't survive a refresh), `useLive` (incl. `deleteSession`), `useTickers`, `useHealth`, `useStrategies`, `usePositionSizingModes`, `useKite`, `useTheme`
+- **Design**: Light/dark toggle theme (4-color palette, `frontend/src/index.css` `:root` + `[data-theme="dark"]`), Inter font, CSS custom properties. `--positive`/`--negative` are true green/red, `--accent`/`--brand-blue` distinct from both
 - **Dev Server**: Port 5173 with Vite proxy to Flask backend on port 5000
 
 ### Key Design Decisions
 - **Zero-setup demo**: App works fully without MongoDB or a broker account using generated dummy data
-- **Data source is dependency-injected**: `routes/*.py` depend only on the `DataProvider` interface via `providers/registry.py`; Kite Connect was added as a new provider alongside Mongo/dummy, not a replacement or special-cased branch
-- **Tax-aware**: Every simulated sell deducts realistic Indian equity taxes
-- **TradingView charts**: Professional-grade financial charts via `lightweight-charts`
-- **Event-driven strategy**: Base `Strategy` class allows pluggable algorithms; four are currently registered (MACD, RSI, SMA Crossover, Bollinger Bands)
-- **Tested**: `backend/tests/` (pytest) covers taxes, broker, all four strategies end-to-end, and provider availability/fallback behavior
+- **Data source is dependency-injected**: `routes/*.py` depend only on the `DataProvider` interface via `providers/registry.py`
+- **Tax-aware, both directions**: every simulated fill (long or short) deducts realistic Indian equity taxes
+- **Event-driven strategy, class not instance**: `BacktestRunner` takes a strategy class and instantiates one per ticker, so the same run can process N tickers with independent strategy state
+- **Config travels with the result**: a backtest run's frontend record stores the settings that produced it, not just the output, so past runs stay interpretable without re-deriving what was asked for
+- **Real-money safety over feature completeness**: `KiteLiveBroker` stays long-only on purpose even though the simulated/paper broker supports shorting — an unmodeled real short is a bigger risk than a strategy's short signal silently no-op'ing live
+- **Tested**: `backend/tests/` (pytest, run via `uv run pytest`) covers taxes, broker (incl. shorting), all eight strategies end-to-end, the multi-ticker backtester, streaming, date-range validation, provider availability/fallback, and the live engine/store
 
 ### Deployment
-- `docker-compose.yml` — three coexisting modes via profiles: no profile (plain `docker compose up -d`) starts only `mongo`, for local hybrid dev; `profiles: ["full"]` (`backend`/`frontend`, ports 3000/5000) is a production-shaped build (gunicorn + nginx-static, no hot reload); `profiles: ["dev"]` (`backend-dev`/`frontend-dev`, ports 3001/5001) bind-mounts source into plain `python`/`node` images and runs the same dev servers the native workflow uses, so Flask's debug reloader and Vite's HMR work inside containers too
-- `backend/Dockerfile` (the `full` profile's build) runs `gunicorn --workers 1 --threads 4`. The single-worker count is load-bearing, not a default left unconsidered: `app/live/engine.py`'s scheduler is an in-process singleton, and >1 worker would each run their own copy and multiply every live session's trades. `backend-dev` (the `dev` profile) runs `python run.py` directly instead, so this constraint doesn't apply there
-- `frontend/Dockerfile` — multi-stage (Vite build → nginx); `frontend/nginx.conf` proxies `/api/*` to the backend container with `proxy_buffering off` so the SSE backtest stream (`/api/backtest/stream`) actually streams through nginx instead of arriving all at once
-- `frontend/vite.config.js`'s proxy target reads `VITE_PROXY_TARGET` (falls back to `http://localhost:5000` for native dev) - `frontend-dev` sets it to `http://backend-dev:5000` since `localhost` inside a container refers to itself, not the backend container; `server.host: true` is also required so the dev server is reachable through the container's port mapping at all
+- `docker-compose.yml` — three coexisting modes via profiles: no profile starts only `mongo`; `profiles: ["full"]` (`backend`/`frontend`, ports 3000/5000) is a production-shaped build (gunicorn + nginx-static, no hot reload); `profiles: ["dev"]` (`backend-dev`/`frontend-dev`, ports 3001/5001) bind-mounts source for hot reload. **Warning**: `docker compose --profile <name> down -v` removes ALL volumes regardless of profile, including `mongo_data` — not profile-scoped, confirmed the hard way once already.
+- `backend/Dockerfile` — multi-stage `uv` build (builder stage has `uv` + build tools, `uv sync --locked`; final stage copies only the synced `.venv` + app code). Runs `gunicorn --workers 1 --threads 4` — the single-worker count is load-bearing: `app/live/engine.py`'s scheduler is an in-process singleton, and >1 worker would multiply every live session's trades. `backend-dev` uses the combined `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` image (`uv sync && uv run python run.py`, no custom Dockerfile) with a named `backend_venv_dev` volume so the container's Linux-built venv never collides with a host macOS venv
+- `frontend/Dockerfile` — multi-stage (Vite build → nginx); `frontend/nginx.conf` proxies `/api/*` with `proxy_buffering off` so SSE streams (`/api/backtest/stream`, `/api/stream`) actually stream through
+- `scripts/setup.sh` — checks for `uv` as a hard prerequisite (alongside python3/node), runs `uv sync --locked` for the backend (no manual venv step)
 
 ### Legacy Code
-`AlgoTrading/` (original scripts) and `api/` (original Flask stub) have been removed — both were explicitly superseded by `backend/` and fully duplicated by `app/engine/` + the providers layer. If reference material from them is ever needed again, it's recoverable from git history prior to their removal.
+`AlgoTrading/` (original scripts) and `api/` (original Flask stub) have been removed — both were explicitly superseded by `backend/`. If reference material from them is ever needed again, it's recoverable from git history prior to their removal.
+
+### Known Gaps (as of this writing)
+- `backend/app/routes/tickers.py`'s `/api/tickers/<symbol>/history` synthesizes O=H=L=C from a single `Value` field when the underlying data doesn't have real OHLC — a stopgap flagged inline in the route.
+- Live-session bars are stored post-resample for intraday intervals (`MAX_BARS=600` in `store.py` bounds resampled, not raw-tick, bars) — a thin lookback window (~2 trading days) for `minute`-interval sessions relative to what a strategy like SMA-50 might want.
+- Interval-resampling logic (pandas `.resample().agg()` + a `freq_map`) is duplicated between `live/engine.py` and `live/scanner.py`, using deprecated `1T`/`3T`-style pandas frequency aliases (works today, forward-compat wart).
+- Archived backtest run history is client-side (`localStorage`) only — no server-side persistence, so it doesn't sync across devices/browsers.

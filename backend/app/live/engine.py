@@ -68,8 +68,38 @@ def run_tick(db, session, kite):
         return session
 
     bars = session.get("bars", [])
-    bars.append({"scripName": session["ticker"], "priceDate": pd.Timestamp.now("UTC").isoformat(), "Value": price, "Volume": 0})
+    bars.append({
+        "scripName": session["ticker"], 
+        "priceDate": pd.Timestamp.now("UTC").isoformat(), 
+        "Value": price, 
+        "Volume": 0,
+        "Open": price,
+        "High": price,
+        "Low": price
+    })
     df = pd.DataFrame(bars)
+
+    interval = session.get("interval", "day")
+    if interval != "day" and not df.empty:
+        freq_map = {"minute": "1T", "3minute": "3T", "5minute": "5T", "10minute": "10T", "15minute": "15T", "30minute": "30T", "60minute": "60T"}
+        freq = freq_map.get(interval)
+        if freq:
+            # Ensure historical bars without OHLC get them filled with Value
+            if "Open" not in df.columns: df["Open"] = df["Value"]
+            if "High" not in df.columns: df["High"] = df["Value"]
+            if "Low" not in df.columns: df["Low"] = df["Value"]
+            
+            df["priceDate"] = pd.to_datetime(df["priceDate"])
+            df.set_index("priceDate", inplace=True)
+            df = df.resample(freq).agg({
+                "scripName": "first",
+                "Value": "last",
+                "Volume": "sum",
+                "Open": "first",
+                "High": "max",
+                "Low": "min"
+            }).dropna().reset_index()
+            df["priceDate"] = df["priceDate"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     broker = _hydrate_broker(session, kite)
     StrategyClass = STRATEGIES[session["strategy"]]
@@ -140,16 +170,26 @@ def _tick_all_sessions():
 
     kite = get_kite()
     ignore_hours = Config.LIVE_IGNORE_MARKET_HOURS
+    
+    active_symbols = set()
 
     for session in store.list_sessions(db, status="running"):
         uses_real_feed = session["mode"] == "live" or kite is not None
         if uses_real_feed and not ignore_hours and not is_market_open():
             continue
+            
+        active_symbols.add(session["ticker"])
+        
         try:
             session = run_tick(db, session, kite)
             store.save_session(db, session)
         except Exception:
             logger.exception("Tick failed for session %s", session.get("_id"))
+            
+    # Keep the WebSocket subscribed to all currently active symbols
+    if active_symbols:
+        from app.live.ticker import subscribe_symbols
+        subscribe_symbols(list(active_symbols))
 
 
 def start_scheduler():

@@ -6,8 +6,8 @@ import LiveSessionsList from './LiveSessionsList'
 
 const POLL_MS = 5000
 
-export default function LiveTrading({ tickers }) {
-  const { sessions, fetchSessions, marketOpen, fetchMarketStatus, createSession, creating, createError, stopSession, killAll } = useLive()
+export default function LiveTrading({ tickers, tickerNames, onSelectTicker }) {
+  const { sessions, fetchSessions, marketOpen, fetchMarketStatus, createSession, creating, createError, stopSession, killAll, deleteSession } = useLive()
   const { status: kiteStatus, fetchStatus: fetchKiteStatus } = useKite()
 
   useEffect(() => {
@@ -38,6 +38,7 @@ export default function LiveTrading({ tickers }) {
         <div>
           <LiveSessionForm
             tickers={tickers}
+            tickerNames={tickerNames}
             kiteConnected={kiteStatus.connected}
             onCreate={createSession}
             creating={creating}
@@ -45,7 +46,7 @@ export default function LiveTrading({ tickers }) {
           />
         </div>
         <div className="right-panel">
-          <LiveSessionsList sessions={sessions} onStop={stopSession} onKillAll={killAll} />
+          <LiveSessionsList sessions={sessions} onStop={stopSession} onDelete={deleteSession} onKillAll={killAll} onSelectTicker={onSelectTicker} />
         </div>
       </div>
     </div>

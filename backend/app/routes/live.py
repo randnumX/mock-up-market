@@ -42,6 +42,7 @@ def create_session():
     req = request.json or {}
     ticker = req.get("ticker")
     strategy = req.get("strategy")
+    interval = req.get("interval", "day")
     mode = req.get("mode", "paper")
     capital = req.get("capital")
     max_capital_per_trade = req.get("max_capital_per_trade")
@@ -79,7 +80,7 @@ def create_session():
         daily_loss_limit = float(daily_loss_limit)
 
     session = store.create_session(
-        db, ticker, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing
+        db, ticker, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing, interval
     )
     return jsonify(summarize_session(session)), 201
 
@@ -93,6 +94,20 @@ def stop_session(session_id):
         return jsonify({"error": "Session not found"}), 404
     store.stop_session(db, session_id, reason="Stopped by user")
     return jsonify({"stopped": True})
+
+
+@live_bp.route('/api/live/sessions/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    db = get_db()
+    if db is None:
+        return jsonify({"error": "MongoDB unavailable"}), 503
+    session = store.get_session(db, session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+    if session["status"] == "running":
+        return jsonify({"error": "Stop the session before deleting it."}), 400
+    store.delete_session(db, session_id)
+    return jsonify({"deleted": True})
 
 
 @live_bp.route('/api/live/kill-all', methods=['POST'])

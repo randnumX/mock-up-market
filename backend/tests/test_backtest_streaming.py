@@ -10,8 +10,8 @@ from app import create_app
 def test_run_streaming_yields_one_tick_per_bar_then_done():
     df = generate_stock_data("SBIN", days=100, seed=1)
     broker = SimulatedBroker(100000)
-    runner = BacktestRunner(broker, MACDStrategy(broker))
-    runner.load_data(df)
+    runner = BacktestRunner(broker, MACDStrategy)
+    runner.load_data("SBIN", df)
 
     events = list(runner.run_streaming())
     ticks = [e for e in events if e["type"] == "tick"]
@@ -29,13 +29,13 @@ def test_run_streaming_produces_identical_result_to_run():
     df = generate_stock_data("TCS", days=200, seed=5)
 
     broker_a = SimulatedBroker(75000)
-    runner_a = BacktestRunner(broker_a, MACDStrategy(broker_a))
-    runner_a.load_data(df)
+    runner_a = BacktestRunner(broker_a, MACDStrategy)
+    runner_a.load_data("TCS", df)
     plain_result = runner_a.run()
 
     broker_b = SimulatedBroker(75000)
-    runner_b = BacktestRunner(broker_b, MACDStrategy(broker_b))
-    runner_b.load_data(df)
+    runner_b = BacktestRunner(broker_b, MACDStrategy)
+    runner_b.load_data("TCS", df)
     streamed_result = next(e for e in runner_b.run_streaming() if e["type"] == "done")["result"]
 
     assert plain_result == streamed_result
@@ -44,8 +44,8 @@ def test_run_streaming_produces_identical_result_to_run():
 def test_streaming_ticks_carry_new_trades_when_a_signal_fires():
     df = generate_stock_data("RELIANCE", days=300, seed=7)
     broker = SimulatedBroker(100000)
-    runner = BacktestRunner(broker, MACDStrategy(broker))
-    runner.load_data(df)
+    runner = BacktestRunner(broker, MACDStrategy)
+    runner.load_data("RELIANCE", df)
 
     all_new_trades = [t for e in runner.run_streaming() if e["type"] == "tick" for t in e["new_trades"]]
     assert len(all_new_trades) == len(broker.history)

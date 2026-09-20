@@ -26,10 +26,13 @@ def test_sell_closes_position_and_applies_taxes():
     assert broker.realized_pnl == round(broker.realized_pnl, 2)
 
 
-def test_sell_fails_when_no_position():
+def test_sell_with_no_position_opens_a_short():
     broker = SimulatedBroker(100000)
     ok = broker.place_order("SELL", "SBIN", price=550, quantity=10, timestamp="2024-01-02")
-    assert ok is False
+    assert ok is True
+    assert broker.positions["SBIN"]["qty"] == -10
+    assert broker.positions["SBIN"]["avg_price"] == 550
+    assert broker.capital == 100000 + 5500
 
 
 def test_partial_sell_keeps_remaining_position():
@@ -37,3 +40,22 @@ def test_partial_sell_keeps_remaining_position():
     broker.place_order("BUY", "SBIN", price=500, quantity=10, timestamp="2024-01-01")
     broker.place_order("SELL", "SBIN", price=550, quantity=4, timestamp="2024-01-02")
     assert broker.positions["SBIN"]["qty"] == 6
+
+
+def test_buy_covers_an_open_short_and_realizes_pnl():
+    broker = SimulatedBroker(100000)
+    broker.place_order("SELL", "SBIN", price=550, quantity=10, timestamp="2024-01-01")
+    ok = broker.place_order("BUY", "SBIN", price=500, quantity=10, timestamp="2024-01-02")
+    assert ok is True
+    assert "SBIN" not in broker.positions
+    # Bought back cheaper than the short was opened at - a winning short.
+    assert broker.realized_pnl > 0
+    assert broker.total_taxes > 0
+
+
+def test_buy_partially_covers_a_short():
+    broker = SimulatedBroker(100000)
+    broker.place_order("SELL", "SBIN", price=550, quantity=10, timestamp="2024-01-01")
+    broker.place_order("BUY", "SBIN", price=500, quantity=4, timestamp="2024-01-02")
+    assert broker.positions["SBIN"]["qty"] == -6
+    assert broker.positions["SBIN"]["avg_price"] == 550

@@ -14,7 +14,7 @@ def _df(prices):
 
 class BuyAndHoldOnce:
     """Buys on bar 1 and never sells - used to test open-position valuation."""
-    def __init__(self, broker):
+    def __init__(self, broker, position_sizer=None):
         self.broker = broker
         self.bought = False
 
@@ -26,11 +26,19 @@ class BuyAndHoldOnce:
             self.bought = True
 
 
+class NoOp:
+    def __init__(self, broker, position_sizer=None):
+        pass
+
+    def on_bar(self, df, i):
+        pass
+
+
 def test_final_capital_includes_value_of_open_position():
     df = _df([100, 100, 110, 120, 130])  # price rises after the buy
     broker = SimulatedBroker(10000)
-    runner = BacktestRunner(broker, BuyAndHoldOnce(broker))
-    runner.load_data(df)
+    runner = BacktestRunner(broker, BuyAndHoldOnce)
+    runner.load_data("TEST", df)
     results = runner.run()
 
     # All cash was spent buying at 100; shares are worth more at the final price of 130.
@@ -43,12 +51,8 @@ def test_final_capital_matches_cash_when_no_open_position():
     df = _df([100, 105, 103, 108])
     broker = SimulatedBroker(10000)
 
-    class NoOp:
-        def on_bar(self, df, i):
-            pass
-
-    runner = BacktestRunner(broker, NoOp())
-    runner.load_data(df)
+    runner = BacktestRunner(broker, NoOp)
+    runner.load_data("TEST", df)
     results = runner.run()
 
     assert results["open_position_value"] == 0
@@ -59,8 +63,8 @@ def test_final_capital_matches_cash_when_no_open_position():
 def test_unrealized_pnl_positive_when_open_position_gained():
     df = _df([100, 100, 110, 120, 130])  # bought at 100, ends at 130
     broker = SimulatedBroker(10000)
-    runner = BacktestRunner(broker, BuyAndHoldOnce(broker))
-    runner.load_data(df)
+    runner = BacktestRunner(broker, BuyAndHoldOnce)
+    runner.load_data("TEST", df)
     results = runner.run()
 
     qty = int(10000 // 100)
@@ -71,8 +75,8 @@ def test_unrealized_pnl_positive_when_open_position_gained():
 def test_unrealized_pnl_negative_when_open_position_lost():
     df = _df([100, 100, 90, 80, 70])  # bought at 100, ends at 70
     broker = SimulatedBroker(10000)
-    runner = BacktestRunner(broker, BuyAndHoldOnce(broker))
-    runner.load_data(df)
+    runner = BacktestRunner(broker, BuyAndHoldOnce)
+    runner.load_data("TEST", df)
     results = runner.run()
 
     qty = int(10000 // 100)

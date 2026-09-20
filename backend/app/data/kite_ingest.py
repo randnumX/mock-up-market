@@ -30,11 +30,11 @@ def get_instrument_token(kite, tradingsymbol, exchange="NSE"):
     return None
 
 
-def fetch_and_store(kite, db, tickers=None, days=730, progress=None):
+def fetch_and_store(kite, db, tickers=None, days=730, interval="day", progress=None):
     """
-    Fetch `days` of daily OHLCV history for each ticker from Kite and
+    Fetch `days` of historical OHLCV history for each ticker from Kite and
     upsert it into Mongo, replacing any previously stored rows for that
-    ticker so re-syncing doesn't create duplicates.
+    ticker and interval so re-syncing doesn't create duplicates.
 
     Returns a summary dict: {synced: [...], failed: [{ticker, reason}], total_candles}
     """
@@ -42,34 +42,69 @@ def fetch_and_store(kite, db, tickers=None, days=730, progress=None):
     collection = db[Config.COLLECTION_HISTORICAL]
 
     to_date = datetime.now()
+    # Kite API limits intraday history (e.g. 5minute is max 100 days). Cap it if needed.
+    if interval in ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute"]:
+        days = min(days, 100 if interval != "minute" else 60)
+        
     from_date = to_date - timedelta(days=days)
 
     synced, failed, total_candles = [], [], 0
 
-    for ticker in tickers:
+    total_requested = len(tickers)
+    for idx, ticker in enumerate(tickers):
         try:
             token = get_instrument_token(kite, ticker)
             if not token:
                 failed.append({"ticker": ticker, "reason": "instrument not found on NSE"})
+                if progress:
+                    progress(ticker, idx + 1, total_requested)
                 continue
 
-            candles = kite.historical_data(token, from_date, to_date, interval="day")
+            # Smart Sync: Check DB for the most recent date we already have for this interval
+            latest_doc = collection.find_one(
+                {"scripName": ticker, "interval": interval}, 
+                sort=[("priceDate", -1)]
+            )
+            
+            if latest_doc and "priceDate" in latest_doc:
+                last_date_str = latest_doc["priceDate"]
+                # Fetch starting from the last date we have, so we can update any partial candles
+                fetch_from = datetime.strptime(last_date_str[:10], "%Y-%m-%d")
+            else:
+                fetch_from = from_date
+
+            candles = kite.historical_data(token, fetch_from, to_date, interval=interval)
             if not candles:
                 failed.append({"ticker": ticker, "reason": "no historical data returned"})
+                if progress:
+                    progress(ticker, idx + 1, total_requested)
                 continue
 
             docs = [
                 {
                     "scripName": ticker,
-                    "priceDate": c["date"].strftime("%Y-%m-%d") if hasattr(c["date"], "strftime") else str(c["date"]),
+                    "interval": interval,
+                    "priceDate": c["date"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(c["date"], "strftime") else str(c["date"])[:19],
                     "Value": float(c["close"]),
                     "Volume": int(c["volume"]),
+                    # Store real OHLC since we have it, strategies like VWAP/ORB need High/Low
+                    "Open": float(c["open"]),
+                    "High": float(c["high"]),
+                    "Low": float(c["low"]),
                 }
                 for c in candles
             ]
 
-            collection.delete_many({"scripName": ticker})
-            collection.insert_many(docs)
+            # Delete any overlapping dates to prevent duplicates, then insert the fresh ones
+            fetch_from_str = fetch_from.strftime("%Y-%m-%d")
+            collection.delete_many({
+                "scripName": ticker, 
+                "interval": interval,
+                "priceDate": {"$gte": fetch_from_str}
+            })
+            
+            if docs:
+                collection.insert_many(docs)
 
             synced.append(ticker)
             total_candles += len(docs)
@@ -77,6 +112,6 @@ def fetch_and_store(kite, db, tickers=None, days=730, progress=None):
             failed.append({"ticker": ticker, "reason": str(e)})
 
         if progress:
-            progress(ticker)
+            progress(ticker, idx + 1, total_requested)
 
     return {"synced": synced, "failed": failed, "total_candles": total_candles}

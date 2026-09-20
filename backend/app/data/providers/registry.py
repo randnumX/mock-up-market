@@ -45,7 +45,7 @@ def get_provider(name=None):
     return None
 
 
-def get_history_with_fallback(ticker, days=365, preferred=None, from_date=None, to_date=None):
+def get_history_with_fallback(ticker, days=365, preferred=None, from_date=None, to_date=None, interval="day"):
     """
     Try providers in order (preferred first, if given and available),
     falling back down the chain until one returns data for `ticker`.
@@ -60,7 +60,7 @@ def get_history_with_fallback(ticker, days=365, preferred=None, from_date=None, 
     for p in providers:
         if not p.is_available():
             continue
-        df = p.get_history(ticker, days=days, from_date=from_date, to_date=to_date)
+        df = p.get_history(ticker, days=days, from_date=from_date, to_date=to_date, interval=interval)
         if df is not None and not df.empty:
             return df, p.name
 

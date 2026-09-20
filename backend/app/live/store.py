@@ -16,11 +16,12 @@ def _now():
 
 
 def create_session(db, ticker, strategy, mode, capital, max_capital_per_trade=None,
-                    daily_loss_limit=None, position_sizing=None):
+                    daily_loss_limit=None, position_sizing=None, interval="day"):
     doc = {
         "_id": str(uuid.uuid4()),
         "ticker": ticker,
         "strategy": strategy,
+        "interval": interval,
         "mode": mode,  # "paper" | "live"
         "status": "running",  # "running" | "stopped" | "halted"
         "halt_reason": None,
@@ -76,6 +77,14 @@ def halt_session(db, session_id, reason):
         {"_id": session_id},
         {"$set": {"status": "halted", "halt_reason": reason, "updated_at": _now()}},
     )
+
+
+def delete_session(db, session_id):
+    """Permanently removes a session document. Only meant for sessions that
+    are already stopped/halted - deleting a running session would just let
+    it keep trading with no record, so callers must stop it first."""
+    result = db[Config.COLLECTION_LIVE_SESSIONS].delete_one({"_id": session_id})
+    return result.deleted_count > 0
 
 
 def stop_all_sessions(db, reason="Kill switch triggered"):

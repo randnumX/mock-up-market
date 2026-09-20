@@ -17,18 +17,28 @@ def create_app():
     from app.routes.backtest import backtest_bp
     from app.routes.kite import kite_bp
     from app.routes.live import live_bp
+    from app.routes.stream import stream_bp
+    from app.routes.scanner import scanner_bp
+    from app.routes.movers import movers_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(tickers_bp)
     app.register_blueprint(backtest_bp)
     app.register_blueprint(kite_bp)
     app.register_blueprint(live_bp)
+    app.register_blueprint(stream_bp)
+    app.register_blueprint(scanner_bp)
+    app.register_blueprint(movers_bp)
 
     # In Flask debug mode the reloader spawns a parent + child process;
     # only start the scheduler in the actual running process, not the
     # parent watcher, or every session would tick twice.
     if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
         from app.live.engine import start_scheduler
+        from app.live.ticker import start_ticker_thread
+        from app.live.scanner import start_scanner_scheduler
         start_scheduler()
+        start_ticker_thread()
+        start_scanner_scheduler()
 
     return app

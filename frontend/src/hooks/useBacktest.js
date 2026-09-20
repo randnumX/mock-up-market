@@ -1,72 +1,156 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 const API_BASE = '/api'
 
 /**
  * Runs a backtest via Server-Sent Events (GET /api/backtest/stream) so the
  * equity curve renders bar-by-bar as it's computed, instead of popping in
- * all at once when a full response lands. `results` grows in place during
- * a run (`results.streaming === true`) and is replaced by the final,
- * authoritative result (identical shape to the plain POST /api/backtest
- * endpoint) once the "done" event arrives.
+ * all at once when a full response lands. Each entry in `resultsList` grows
+ * in place during a run (`status: 'streaming'`) and is replaced by the
+ * final, authoritative result (identical shape to the plain POST
+ * /api/backtest endpoint) once the "done" event arrives.
  */
 export function useBacktest() {
-  const [results, setResults] = useState(null)
+  const [resultsList, setResultsList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('backtest_results')
+      if (!saved) return []
+      const parsed = JSON.parse(saved)
+      // A 'streaming' entry only means anything while its EventSource is
+      // alive in memory - that connection doesn't survive a page refresh,
+      // so any entry still marked 'streaming' on load is a run that was
+      // interrupted, not one still in progress. Reconcile it now instead
+      // of leaving a permanently frozen "0%, streaming" row.
+      return parsed.map(res => res.status === 'streaming'
+        ? { ...res, status: 'error', errorMsg: 'Interrupted by page refresh' }
+        : res)
+    } catch (e) {
+      console.error('Failed to parse cached backtest results', e)
+    }
+    return []
+  })
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    localStorage.setItem('backtest_results', JSON.stringify(resultsList))
+  }, [resultsList])
+
+  // Refs for tracking currently streaming data
+  const streamRef = useRef(null)
+  const resultsRef = useRef(resultsList)
+
+  useEffect(() => {
+    resultsRef.current = resultsList
+  }, [resultsList])
+
   const esRef = useRef(null)
 
-  const runBacktest = useCallback(({ ticker, capital, strategy, from_date, to_date, position_sizing }) => {
+  const runBacktest = useCallback(async ({ tickers, capital, strategy, from_date, to_date, position_sizing, interval, max_capital_per_trade, daily_loss_limit }) => {
     esRef.current?.close()
 
     setLoading(true)
     setError(null)
     setProgress(0)
-    setResults({ ticker, strategy, equity_curve: [], trades: [], streaming: true })
 
-    const params = new URLSearchParams({ ticker, capital: String(Number(capital)), strategy })
-    if (from_date) params.set('from_date', from_date)
-    if (to_date) params.set('to_date', to_date)
-    if (position_sizing?.mode) {
-      params.set('sizing_mode', position_sizing.mode)
-      if (position_sizing.fraction !== undefined) params.set('sizing_fraction', position_sizing.fraction)
-      if (position_sizing.risk_per_trade !== undefined) params.set('sizing_risk_per_trade', position_sizing.risk_per_trade)
-      if (position_sizing.lookback !== undefined) params.set('sizing_lookback', position_sizing.lookback)
+    // We send a single request for the entire portfolio
+    const combinedTickers = tickers.join(',')
+    const runId = Date.now() // Unique ID for this run
+
+    const newEntry = {
+      id: runId,
+      ticker: combinedTickers,
+      strategy,
+      equity_curve: [],
+      trades: [],
+      status: 'streaming',
+      config: {
+        capital: Number(capital),
+        from_date: from_date || null,
+        to_date: to_date || null,
+        interval: interval || 'day',
+        position_sizing: position_sizing || null,
+        max_capital_per_trade: max_capital_per_trade || null,
+        daily_loss_limit: daily_loss_limit || null,
+      },
     }
-    const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
-    esRef.current = es
 
-    es.onmessage = (msg) => {
-      const event = JSON.parse(msg.data)
+    setResultsList(prev => [...prev, newEntry])
 
-      if (event.type === 'tick') {
-        setProgress(Math.round(((event.index + 1) / event.total) * 100))
-        setResults((prev) => ({
-          ...prev,
-          equity_curve: [...(prev?.equity_curve || []), event.point],
-          trades: event.new_trades.length ? [...(prev?.trades || []), ...event.new_trades] : prev?.trades || [],
-        }))
-      } else if (event.type === 'done') {
-        setResults({ ...event.result, streaming: false })
-        setProgress(100)
-        setLoading(false)
-        es.close()
+    await new Promise((resolve) => {
+      const params = new URLSearchParams({ ticker: combinedTickers, capital: String(Number(capital)), strategy })
+      if (interval) params.set('interval', interval)
+      if (from_date) params.set('from_date', from_date)
+      if (to_date) params.set('to_date', to_date)
+      if (max_capital_per_trade) params.set('max_capital_per_trade', max_capital_per_trade)
+      if (daily_loss_limit) params.set('daily_loss_limit', daily_loss_limit)
+      if (position_sizing?.mode) {
+        params.set('sizing_mode', position_sizing.mode)
+        if (position_sizing.fraction !== undefined) params.set('sizing_fraction', position_sizing.fraction)
+        if (position_sizing.risk_per_trade !== undefined) params.set('sizing_risk_per_trade', position_sizing.risk_per_trade)
+        if (position_sizing.lookback !== undefined) params.set('sizing_lookback', position_sizing.lookback)
       }
-    }
 
-    es.onerror = () => {
-      setError('Lost connection to the backtest stream')
-      setLoading(false)
-      es.close()
-    }
+      const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
+      esRef.current = es
+
+      es.onmessage = (msg) => {
+        const event = JSON.parse(msg.data)
+
+        if (event.type === 'tick') {
+          setProgress(Math.round(((event.index + 1) / event.total) * 100))
+          setResultsList(prev => prev.map(res => {
+            if (res.id !== runId) return res
+            return {
+              ...res,
+              equity_curve: [...res.equity_curve, event.point],
+              trades: event.new_trades.length ? [...res.trades, ...event.new_trades] : res.trades,
+            }
+          }))
+        } else if (event.type === 'done') {
+          setResultsList(prev => prev.map(res => {
+            if (res.id !== runId) return res
+            return { ...res, ...event.result, status: 'done' }
+          }))
+          setProgress(100)
+          es.close()
+          resolve()
+        }
+      }
+
+      es.onerror = () => {
+        setResultsList(prev => prev.map(res => {
+          if (res.id !== runId) return res
+          return { ...res, status: 'error', errorMsg: 'Stream failed' }
+        }))
+        es.close()
+        resolve()
+      }
+    })
+
+    setLoading(false)
   }, [])
 
-  return { results, loading, progress, error, runBacktest }
+  const deleteResult = useCallback((id) => {
+    setResultsList(prev => prev.filter(res => res.id !== id))
+  }, [])
+
+  const deleteResults = useCallback((ids) => {
+    const idSet = new Set(ids)
+    setResultsList(prev => prev.filter(res => !idSet.has(res.id)))
+  }, [])
+
+  const clearArchivedResults = useCallback(() => {
+    setResultsList(prev => prev.filter(res => res.status === 'streaming' || res.status === 'pending'))
+  }, [])
+
+  return { resultsList, loading, progress, error, runBacktest, deleteResult, deleteResults, clearArchivedResults }
 }
 
 export function useTickers() {
   const [tickers, setTickers] = useState([])
+  const [tickerNames, setTickerNames] = useState({})
   const [source, setSource] = useState('loading')
 
   const fetchTickers = useCallback(async () => {
@@ -74,14 +158,22 @@ export function useTickers() {
       const res = await fetch(`${API_BASE}/tickers`)
       const data = await res.json()
       setTickers(data.tickers || [])
+      setTickerNames(data.names || {})
       setSource(data.source || 'unknown')
     } catch {
       setTickers(['SBIN', 'RELIANCE', 'HDFCBANK', 'INFY', 'TCS'])
+      setTickerNames({
+        'SBIN': 'State Bank of India',
+        'RELIANCE': 'Reliance Industries',
+        'HDFCBANK': 'HDFC Bank',
+        'INFY': 'Infosys',
+        'TCS': 'Tata Consultancy Services'
+      })
       setSource('fallback')
     }
   }, [])
 
-  return { tickers, source, fetchTickers }
+  return { tickers, tickerNames, source, fetchTickers }
 }
 
 export function useHealth() {
@@ -135,6 +227,8 @@ export function usePositionSizingModes() {
 export function useKite() {
   const [status, setStatus] = useState({ configured: false, connected: false })
   const [syncing, setSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState(null)
+  const [syncLogs, setSyncLogs] = useState([])
   const [syncResult, setSyncResult] = useState(null)
   const [syncError, setSyncError] = useState(null)
 
@@ -165,6 +259,33 @@ export function useKite() {
     setSyncing(true)
     setSyncError(null)
     setSyncResult(null)
+    setSyncProgress(null)
+    setSyncLogs([])
+
+    const es = new EventSource(`${API_BASE}/stream`)
+
+    es.onmessage = (msg) => {
+      try {
+        const event = JSON.parse(msg.data)
+        if (event.type === 'sync_progress') {
+          setSyncProgress({ current: event.current, total: event.total, ticker: event.ticker })
+          setSyncLogs(prev => {
+            const date = new Date().toLocaleTimeString('en-US', { hour12: false })
+            const newLogs = [...prev, `[${date}] ✅ Processed ${event.ticker}`]
+            return newLogs.length > 50 ? newLogs.slice(newLogs.length - 50) : newLogs
+          })
+        } else if (event.type === 'sync_complete') {
+          setSyncResult(event.result)
+          setSyncing(false)
+          es.close()
+        } else if (event.type === 'sync_error') {
+          setSyncError(event.error)
+          setSyncing(false)
+          es.close()
+        }
+      } catch (err) { }
+    }
+
     try {
       const res = await fetch(`${API_BASE}/kite/sync`, {
         method: 'POST',
@@ -172,14 +293,16 @@ export function useKite() {
         body: JSON.stringify({ tickers }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Sync failed')
-      setSyncResult(data)
+      if (!res.ok) {
+        throw new Error(data.error || 'Sync failed')
+      }
+      // EventSource listener will flip syncing to false when done
     } catch (err) {
       setSyncError(err.message)
-    } finally {
       setSyncing(false)
+      es.close()
     }
   }, [])
 
-  return { status, fetchStatus, connect, disconnect, sync, syncing, syncResult, syncError }
+  return { status, fetchStatus, connect, disconnect, sync, syncing, syncProgress, syncLogs, syncResult, syncError }
 }

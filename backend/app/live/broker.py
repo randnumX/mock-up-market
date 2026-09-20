@@ -3,10 +3,17 @@ Two broker implementations for the live engine, sharing the exact same
 place_order(...) signature the Strategy classes already call in backtests:
 
 - PaperBroker: virtual money, real-time prices, zero financial risk.
-  Reuses SimulatedBroker's tax-aware fill logic unchanged.
+  Reuses SimulatedBroker's tax-aware fill logic unchanged, including
+  short-selling (a SELL with no long position open opens/grows a short).
 - KiteLiveBroker: places REAL orders on the connected Zerodha account.
   Local capital/positions are a best-effort mirror for the dashboard;
   Kite itself is the source of truth for actual fills/holdings.
+  Deliberately long-only: a SELL is still clamped to the existing
+  position size below, so a short-side signal (e.g. ORB's breakdown
+  entry) silently no-ops here instead of opening a real short. Real
+  equity shorting on NSE has margin/product-type rules (MIS intraday
+  only, no CNC overnight shorts) this mirror doesn't model - clamping
+  to no-op is the safe default until that's deliberately built out.
 
 Both respect an optional per-trade capital cap (risk control), clamping
 order size down rather than rejecting the signal outright.
@@ -16,18 +23,6 @@ from app.engine.broker import SimulatedBroker
 
 class PaperBroker(SimulatedBroker):
     mode = "paper"
-
-    def __init__(self, capital, max_capital_per_trade=None):
-        super().__init__(capital)
-        self.max_capital_per_trade = max_capital_per_trade
-
-    def place_order(self, order_type, symbol, price, quantity, timestamp, is_intraday=False):
-        if order_type == "BUY" and self.max_capital_per_trade:
-            quantity = min(quantity, int(self.max_capital_per_trade // price))
-            if quantity <= 0:
-                return False
-        return super().place_order(order_type, symbol, price, quantity, timestamp, is_intraday)
-
 
 class KiteLiveBroker:
     mode = "live"

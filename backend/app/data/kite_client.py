@@ -22,8 +22,8 @@ _profile = None
 
 
 def is_configured():
-    """True if KITE_API_KEY / KITE_API_SECRET are set and the SDK is installed."""
-    return bool(KiteConnect and Config.KITE_API_KEY and Config.KITE_API_SECRET)
+    """True if KITE_ALLOW is true, KITE_API_KEY / KITE_API_SECRET are set and the SDK is installed."""
+    return bool(Config.KITE_ALLOW and KiteConnect and Config.KITE_API_KEY and Config.KITE_API_SECRET)
 
 
 def _load_session():

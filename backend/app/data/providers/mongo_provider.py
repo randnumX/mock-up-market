@@ -21,38 +21,47 @@ class MongoProvider(DataProvider):
         except Exception:
             return []
 
-    def get_history(self, ticker, days=365, from_date=None, to_date=None):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None, interval="day"):
         if not self.is_available():
             return None
 
         query = {"scripName": ticker}
+        if interval == "day":
+            query["$or"] = [{"interval": "day"}, {"interval": {"$exists": False}}]
+        else:
+            query["interval"] = interval
+
         if from_date or to_date:
-            # priceDate is stored as an ISO "YYYY-MM-DD" string everywhere it's
-            # written (kite_ingest, fetch_bse_data), so lexicographic range
-            # comparison is exact - no date parsing needed.
+            # priceDate is stored as an ISO "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" string 
             date_filter = {}
             if from_date:
                 date_filter["$gte"] = from_date
             if to_date:
-                date_filter["$lte"] = to_date
+                date_filter["$lte"] = to_date + " 23:59:59" if len(to_date) == 10 else to_date
             query["priceDate"] = date_filter
 
         try:
-            records = list(self.db[Config.COLLECTION_HISTORICAL].find(query))
+            records = list(self.db[Config.COLLECTION_HISTORICAL].find(query).sort("priceDate", 1))
         except Exception:
             return None
         if not records:
             return None
         return pd.DataFrame(records)
 
-    def get_latest_price(self, ticker, last_known_price=None):
-        """Mongo only holds daily candles, not a live feed - last stored close is the
+    def get_latest_price(self, ticker, last_known_price=None, interval="day"):
+        """Mongo only holds stored candles, not a live feed - last stored close is the
         best it can offer. Sessions using this provider should expect coarse ticks."""
         if not self.is_available():
             return None
         try:
+            query = {"scripName": ticker}
+            if interval == "day":
+                query["$or"] = [{"interval": "day"}, {"interval": {"$exists": False}}]
+            else:
+                query["interval"] = interval
+                
             doc = self.db[Config.COLLECTION_HISTORICAL].find_one(
-                {"scripName": ticker}, sort=[("priceDate", -1)]
+                query, sort=[("priceDate", -1)]
             )
         except Exception:
             return None

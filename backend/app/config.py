@@ -18,6 +18,7 @@ class Config:
     LIVE_IGNORE_MARKET_HOURS = os.getenv('LIVE_IGNORE_MARKET_HOURS', 'false').lower() == 'true'
 
     # Zerodha Kite Connect (real market data ingestion)
+    KITE_ALLOW = os.getenv('KITE_ALLOW', 'false').lower() == 'true'
     KITE_API_KEY = os.getenv('KITE_API_KEY', '')
     KITE_API_SECRET = os.getenv('KITE_API_SECRET', '')
     KITE_REDIRECT_URL = os.getenv('KITE_REDIRECT_URL', 'http://localhost:5000/api/kite/callback')

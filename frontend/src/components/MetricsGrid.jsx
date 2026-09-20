@@ -56,9 +56,55 @@ function OverallSummary({ results }) {
   )
 }
 
-export default function MetricsGrid({ results, progress }) {
+export default function MetricsGrid({ results, progress, drilldownTicker = 'ALL' }) {
   if (!results) return null
-  if (results.streaming) return <StreamingMetrics results={results} progress={progress} />
+  if (results.status === 'streaming') return <StreamingMetrics results={results} progress={progress} />
+
+  if (drilldownTicker !== 'ALL' && results.ticker_stats && results.ticker_stats[drilldownTicker]) {
+    const stats = results.ticker_stats[drilldownTicker]
+    const tickerMetrics = [
+      {
+        label: 'Trades Executed',
+        value: stats.total_trades,
+        className: 'accent',
+        sub: 'Total trades for this ticker',
+      },
+      {
+        label: 'Realized P&L',
+        value: signedINR(stats.realized_pnl),
+        className: stats.realized_pnl >= 0 ? 'positive' : 'negative',
+        sub: 'From closed trades',
+      },
+      {
+        label: 'Win Rate',
+        value: `${stats.win_rate}%`,
+        className: 'accent',
+        sub: 'Profitable trades',
+      }
+    ]
+
+    return (
+      <>
+        <div className="overall-summary animate-in overall-summary-gain" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+          <div className="overall-summary-line" style={{ color: 'var(--brand-blue)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <span className="overall-summary-amount">{drilldownTicker}</span>
+            <span className="overall-summary-arrow" style={{ opacity: 0.5, fontSize: '1.2rem' }}>—</span>
+            <span className="overall-summary-amount" style={{ color: 'var(--text-primary)', fontSize: '1.2rem' }}>Individual Performance</span>
+          </div>
+        </div>
+
+        <div className="metrics-grid animate-in" style={{ animationDelay: '50ms' }}>
+          {tickerMetrics.map((m, i) => (
+            <div key={m.label} className="metric-card" style={{ animationDelay: `${i * 0.1}s` }}>
+              <div className="metric-label">{m.label}</div>
+              <div className={`metric-value ${m.className}`}>{m.value}</div>
+              {m.sub && <div className="metric-sub">{m.sub}</div>}
+            </div>
+          ))}
+        </div>
+      </>
+    )
+  }
 
   const hasOpenPosition = results.open_position_value > 0
 

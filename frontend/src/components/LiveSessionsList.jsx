@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, TriangleAlert, Square, Power, Zap } from 'lucide-react'
+import { FileText, TriangleAlert, Square, Power, Zap, Trash2 } from 'lucide-react'
 import { fmtINR, signedINR } from '../utils/format'
 
 const STATUS_LABELS = {
@@ -8,7 +8,7 @@ const STATUS_LABELS = {
   halted: { label: 'Halted', cls: 'offline' },
 }
 
-function SessionCard({ session, onStop }) {
+function SessionCard({ session, onStop, onDelete, onSelectTicker }) {
   const status = STATUS_LABELS[session.status] || STATUS_LABELS.stopped
   const positions = Object.entries(session.positions || {})
   const recentTrades = [...(session.history || [])].reverse().slice(0, 5)
@@ -20,7 +20,13 @@ function SessionCard({ session, onStop }) {
           <span className={`mode-pill ${session.mode === 'live' ? 'mode-pill-live' : 'mode-pill-paper'}`}>
             {session.mode === 'live' ? (<><TriangleAlert size={11} /> LIVE</>) : (<><FileText size={11} /> PAPER</>)}
           </span>
-          <strong className="session-ticker">{session.ticker}</strong>
+          <button 
+            className="text-link session-ticker" 
+            onClick={() => onSelectTicker?.(session.ticker)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            {session.ticker}
+          </button>
           <span className="session-strategy">{session.strategy}</span>
         </div>
         <div className="kite-status-row">
@@ -74,16 +80,28 @@ function SessionCard({ session, onStop }) {
         </div>
       )}
 
-      {session.status === 'running' && (
-        <button className="btn-secondary btn-with-icon" style={{ marginTop: '0.75rem' }} onClick={() => onStop(session._id)}>
-          <Square size={13} /> Stop Session
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+        {session.status === 'running' && (
+          <button className="btn-secondary btn-with-icon" onClick={() => onStop(session._id)}>
+            <Square size={13} /> Stop Session
+          </button>
+        )}
+        {session.status !== 'running' && (
+          <button
+            className="btn-secondary btn-with-icon"
+            onClick={() => {
+              if (window.confirm('Delete this session? This cannot be undone.')) onDelete(session._id)
+            }}
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-export default function LiveSessionsList({ sessions, onStop, onKillAll }) {
+export default function LiveSessionsList({ sessions, onStop, onDelete, onKillAll, onSelectTicker }) {
   const [confirmingKill, setConfirmingKill] = useState(false)
   const runningCount = sessions.filter((s) => s.status === 'running').length
 
@@ -120,7 +138,7 @@ export default function LiveSessionsList({ sessions, onStop, onKillAll }) {
         </div>
       )}
       <div className="sessions-grid">
-        {sessions.map((s) => <SessionCard key={s._id} session={s} onStop={onStop} />)}
+        {sessions.map((s) => <SessionCard key={s._id} session={s} onStop={onStop} onDelete={onDelete} onSelectTicker={onSelectTicker} />)}
       </div>
     </div>
   )

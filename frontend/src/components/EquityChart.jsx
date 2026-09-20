@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, createSeriesMarkers, AreaSeries, ColorType } from 'lightweight-charts'
 import { LineChart } from 'lucide-react'
+import { useTheme } from '../hooks/useTheme'
 
 const parseDate = (dateStr) => {
   const d = new Date(dateStr)
@@ -8,30 +9,66 @@ const parseDate = (dateStr) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const toMarker = (t) => {
+// lightweight-charts takes literal colors, not CSS variables, so it can't
+// just inherit the page's theme - these mirror index.css's two palettes
+// and get picked by theme at chart-creation time (see the effect below).
+const CHART_PALETTES = {
+  dark: {
+    text: '#d9c7c5',
+    grid: 'rgba(247,214,208,0.06)',
+    crosshair: 'rgba(226,180,189,0.5)',
+    border: 'rgba(247,214,208,0.16)',
+    equityTop: 'rgba(226, 180, 189, 0.3)',
+    equityLine: '#e2b4bd',
+    priceTop: 'rgba(247, 214, 208, 0.25)',
+    priceLine: '#f7d6d0',
+    buy: '#8fbe9d',
+    sell: '#e0b968',
+  },
+  light: {
+    text: '#7a7a7a',
+    grid: 'rgba(74,74,74,0.06)',
+    crosshair: 'rgba(226,180,189,0.6)',
+    border: 'rgba(74,74,74,0.14)',
+    equityTop: 'rgba(226, 180, 189, 0.35)',
+    equityLine: '#c98d99',
+    priceTop: 'rgba(74, 74, 74, 0.1)',
+    priceLine: '#8a7570',
+    buy: '#6b9080',
+    sell: '#c9a227',
+  },
+}
+
+const toMarker = (t, colors) => {
   const time = parseDate(t.timestamp)
   if (!time) return null
   return {
     time,
     position: t.type === 'BUY' ? 'belowBar' : 'aboveBar',
-    color: t.type === 'BUY' ? '#10b981' : '#f59e0b',
+    color: t.type === 'BUY' ? colors.buy : colors.sell,
     shape: t.type === 'BUY' ? 'arrowUp' : 'arrowDown',
     text: t.type,
   }
 }
 
-export default function EquityChart({ results }) {
+export default function EquityChart({ results, drilldownTicker = 'ALL' }) {
   const chartRef = useRef(null)
   const chartInstance = useRef(null)
   const seriesInstance = useRef(null)
   const markersPlugin = useRef(null)
   const lastCurveLen = useRef(0)
+  const colorsRef = useRef(CHART_PALETTES.dark)
   const [activeTab, setActiveTab] = useState('equity')
+  const { theme } = useTheme()
 
-  // (Re)build the chart when the tab changes, or on mount - hydrated with
-  // whatever data is already available so switching tabs mid-stream works.
+  const isDrilldown = drilldownTicker !== 'ALL'
+  const currentTab = isDrilldown ? 'price' : activeTab
+
+  // (Re)build the chart when the tab, theme, or drilldownTicker changes
   useEffect(() => {
     if (!chartRef.current) return
+    const colors = CHART_PALETTES[theme] || CHART_PALETTES.dark
+    colorsRef.current = colors
 
     if (chartInstance.current) {
       chartInstance.current.remove()
@@ -39,52 +76,59 @@ export default function EquityChart({ results }) {
     }
 
     const chart = createChart(chartRef.current, {
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#ab9fa6',
+        textColor: colors.text,
         fontSize: 12,
         fontFamily: 'Inter, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(255,255,255,0.04)' },
-        horzLines: { color: 'rgba(255,255,255,0.04)' },
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: 'rgba(59,130,246,0.4)', width: 1, style: 2 },
-        horzLine: { color: 'rgba(59,130,246,0.4)', width: 1, style: 2 },
+        vertLine: { color: colors.crosshair, width: 1, style: 2 },
+        horzLine: { color: colors.crosshair, width: 1, style: 2 },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: false },
+      rightPriceScale: { borderColor: colors.border },
+      timeScale: { borderColor: colors.border, timeVisible: false },
       handleScroll: true,
       handleScale: true,
     })
 
-    const series = activeTab === 'equity'
+    const series = currentTab === 'equity'
       ? chart.addSeries(AreaSeries, {
-        topColor: 'rgba(59, 130, 246, 0.35)',
-        bottomColor: 'rgba(59, 130, 246, 0.0)',
-        lineColor: '#3b82f6',
+        topColor: colors.equityTop,
+        bottomColor: 'rgba(0, 0, 0, 0.0)',
+        lineColor: colors.equityLine,
         lineWidth: 2,
       })
       : chart.addSeries(AreaSeries, {
-        topColor: 'rgba(139, 92, 246, 0.3)',
-        bottomColor: 'rgba(139, 92, 246, 0.0)',
-        lineColor: '#8b5cf6',
+        topColor: colors.priceTop,
+        bottomColor: 'rgba(0, 0, 0, 0.0)',
+        lineColor: colors.priceLine,
         lineWidth: 2,
       })
 
-    const curve = results?.equity_curve || []
-    const valueKey = activeTab === 'equity' ? 'equity' : 'price'
+    const curve = isDrilldown 
+      ? (results?.ticker_stats?.[drilldownTicker]?.prices || [])
+      : (results?.equity_curve || [])
+      
+    const valueKey = currentTab === 'equity' ? 'equity' : 'price'
     const initialData = curve
       .map((p) => ({ time: parseDate(p.time), value: p[valueKey] }))
       .filter((p) => p.time !== null)
+      
     series.setData(initialData)
     lastCurveLen.current = curve.length
 
-    markersPlugin.current = activeTab === 'price' ? createSeriesMarkers(series, []) : null
+    markersPlugin.current = currentTab === 'price' ? createSeriesMarkers(series, []) : null
     if (markersPlugin.current) {
-      const markers = (results?.trades || []).map(toMarker).filter(Boolean).sort((a, b) => (a.time > b.time ? 1 : -1))
+      const allTrades = results?.trades || []
+      const trades = isDrilldown ? allTrades.filter(t => t.symbol === drilldownTicker) : allTrades
+      const markers = trades.map((t) => toMarker(t, colors)).filter(Boolean).sort((a, b) => (a.time > b.time ? 1 : -1))
       markersPlugin.current.setMarkers(markers)
     }
 
@@ -92,33 +136,26 @@ export default function EquityChart({ results }) {
     chartInstance.current = chart
     seriesInstance.current = series
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (chartRef.current) {
-        chart.applyOptions({ width: chartRef.current.clientWidth, height: chartRef.current.clientHeight })
-      }
-    })
-    resizeObserver.observe(chartRef.current)
-
     return () => {
-      resizeObserver.disconnect()
       chart.remove()
       chartInstance.current = null
       seriesInstance.current = null
       markersPlugin.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  }, [currentTab, theme, drilldownTicker])
 
-  // Append only what's new since the last render - keeps live streaming
-  // smooth (no chart teardown/rebuild per tick) instead of full setData().
+  // Append only what's new since the last render - keeps live streaming smooth
   useEffect(() => {
     if (!results || !seriesInstance.current) return
 
-    const curve = results.equity_curve || []
-    const valueKey = activeTab === 'equity' ? 'equity' : 'price'
+    const curve = isDrilldown 
+      ? (results.ticker_stats?.[drilldownTicker]?.prices || [])
+      : (results.equity_curve || [])
+      
+    const valueKey = currentTab === 'equity' ? 'equity' : 'price'
 
     if (curve.length < lastCurveLen.current) {
-      // A new run started (curve reset to empty/shorter) - clear and restart.
       seriesInstance.current.setData([])
       markersPlugin.current?.setMarkers([])
       lastCurveLen.current = 0
@@ -132,15 +169,16 @@ export default function EquityChart({ results }) {
     lastCurveLen.current = curve.length
 
     if (markersPlugin.current) {
-      const markers = (results.trades || []).map(toMarker).filter(Boolean).sort((a, b) => (a.time > b.time ? 1 : -1))
+      const allTrades = results.trades || []
+      const trades = isDrilldown ? allTrades.filter(t => t.symbol === drilldownTicker) : allTrades
+      const markers = trades.map((t) => toMarker(t, colorsRef.current)).filter(Boolean).sort((a, b) => (a.time > b.time ? 1 : -1))
       markersPlugin.current.setMarkers(markers)
     }
 
-    if (!results.streaming) {
-      chartInstance.current?.timeScale().fitContent()
-    }
+    chartInstance.current?.timeScale().fitContent()
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results])
+  }, [results, drilldownTicker])
 
   if (!results) {
     return (
@@ -158,25 +196,31 @@ export default function EquityChart({ results }) {
 
   return (
     <div className="glass-card animate-in">
-      <div className="card-title">
-        {activeTab === 'equity' ? 'Portfolio Equity Curve' : 'Price Chart with Trade Signals'}
-        {results.streaming && <span className="live-pill">● LIVE</span>}
+      <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>
+          {isDrilldown ? `Price + Signals: ${drilldownTicker}` : (currentTab === 'equity' ? 'Portfolio Equity Curve' : 'Price Chart with Trade Signals')}
+        </span>
+        {results.status === 'streaming' && <span className="live-pill">● LIVE</span>}
       </div>
-      <div className="chart-tabs">
-        <button
-          className={`chart-tab ${activeTab === 'equity' ? 'active' : ''}`}
-          onClick={() => setActiveTab('equity')}
-        >
-          Equity Curve
-        </button>
-        <button
-          className={`chart-tab ${activeTab === 'price' ? 'active' : ''}`}
-          onClick={() => setActiveTab('price')}
-        >
-          Price + Signals
-        </button>
-      </div>
-      <div className="chart-wrapper" ref={chartRef} />
+      
+      {!isDrilldown && (
+        <div className="chart-tabs">
+          <button
+            className={`chart-tab ${activeTab === 'equity' ? 'active' : ''}`}
+            onClick={() => setActiveTab('equity')}
+          >
+            Equity Curve
+          </button>
+          <button
+            className={`chart-tab ${activeTab === 'price' ? 'active' : ''}`}
+            onClick={() => setActiveTab('price')}
+          >
+            Price + Signals
+          </button>
+        </div>
+      )}
+      
+      <div className="chart-wrapper" ref={chartRef} style={{ marginTop: isDrilldown ? '1rem' : '0' }} />
     </div>
   )
 }

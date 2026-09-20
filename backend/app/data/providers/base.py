@@ -15,7 +15,7 @@ class DataProvider:
         """Return a sorted list of ticker symbols this provider can serve."""
         raise NotImplementedError
 
-    def get_history(self, ticker, days=365, from_date=None, to_date=None):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None, interval="day"):
         """
         Return a pandas DataFrame with columns scripName/priceDate/Value/Volume
         for `ticker`, or None/empty if unavailable for that ticker.
@@ -23,6 +23,10 @@ class DataProvider:
         `from_date`/`to_date` (ISO strings "YYYY-MM-DD", inclusive) restrict
         the range explicitly, overriding `days`, when given by the caller
         (e.g. a user-selected backtest date range in the UI).
+
+        `interval` ("day", "minute", "5minute", ...) selects the bar size.
+        Every provider must accept this kwarg even if it can only honor
+        "day" - callers pass it unconditionally.
         """
         raise NotImplementedError
 

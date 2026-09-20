@@ -1,9 +1,13 @@
 import { fmtINR, signedINR } from '../utils/format'
 
-export default function TradeLog({ results }) {
+export default function TradeLog({ results, drilldownTicker = 'ALL' }) {
   if (!results || !results.trades || results.trades.length === 0) return null
 
-  const trades = [...results.trades].reverse()
+  const isDrilldown = drilldownTicker !== 'ALL'
+  const allTrades = [...results.trades].reverse()
+  const trades = isDrilldown 
+    ? allTrades.filter(t => t.symbol === drilldownTicker)
+    : allTrades
 
   const formatDate = (ts) => {
     if (!ts || ts === 'None') return '—'
@@ -14,12 +18,18 @@ export default function TradeLog({ results }) {
 
   return (
     <div className="glass-card animate-in">
-      <div className="card-title">Trade Log ({results.trades.length} orders)</div>
+      <div className="card-title">
+        {isDrilldown ? `Trade Log: ${drilldownTicker}` : 'Portfolio Trade Log'} 
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'normal', marginLeft: '0.5rem' }}>
+          ({trades.length} orders)
+        </span>
+      </div>
       <div className="trade-log-wrapper">
         <table className="trade-table">
           <thead>
             <tr>
               <th>Date</th>
+              {!isDrilldown && <th>Symbol</th>}
               <th>Type</th>
               <th>Qty</th>
               <th>Price</th>
@@ -31,6 +41,9 @@ export default function TradeLog({ results }) {
             {trades.map((t, i) => (
               <tr key={i}>
                 <td>{formatDate(t.timestamp)}</td>
+                {!isDrilldown && (
+                  <td style={{ fontWeight: 500, color: 'var(--brand-blue)' }}>{t.symbol || '—'}</td>
+                )}
                 <td>
                   <span className={`trade-type ${t.type.toLowerCase()}`}>
                     {t.type}

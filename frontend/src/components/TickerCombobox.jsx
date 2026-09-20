@@ -8,15 +8,20 @@ const MAX_RESULTS = 50
  * Mongo has thousands of real BSE tickers loaded - this keeps the same
  * "pick one ticker" contract but scales to that list size.
  */
-export default function TickerCombobox({ tickers, value, onChange, id }) {
+export default function TickerCombobox({ tickers, tickerNames, value, onChange, id }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
   const containerRef = useRef(null)
   const inputRef = useRef(null)
 
-  const filtered = (query
-    ? tickers.filter((t) => t.toLowerCase().includes(query.toLowerCase()))
+  const isQueryJustValue = query === value
+  const filtered = (query && !isQueryJustValue
+    ? tickers.filter((t) => {
+        const q = query.toLowerCase()
+        const name = (tickerNames?.[t] || '').toLowerCase()
+        return t.toLowerCase().includes(q) || name.includes(q)
+      })
     : tickers
   ).slice(0, MAX_RESULTS)
 
@@ -24,7 +29,6 @@ export default function TickerCombobox({ tickers, value, onChange, id }) {
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false)
-        setQuery('')
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -33,7 +37,7 @@ export default function TickerCombobox({ tickers, value, onChange, id }) {
 
   const select = (ticker) => {
     onChange(ticker)
-    setQuery('')
+    setQuery(ticker)
     setOpen(false)
     inputRef.current?.blur()
   }
@@ -56,7 +60,6 @@ export default function TickerCombobox({ tickers, value, onChange, id }) {
       if (filtered[highlighted]) select(filtered[highlighted])
     } else if (e.key === 'Escape') {
       setOpen(false)
-      setQuery('')
     }
   }
 
@@ -68,9 +71,14 @@ export default function TickerCombobox({ tickers, value, onChange, id }) {
           ref={inputRef}
           type="text"
           className="form-input"
-          placeholder={value || 'Search ticker...'}
-          value={query}
-          onFocus={() => { setOpen(true); setHighlighted(0) }}
+          placeholder="Search ticker..."
+          value={open ? query : (value || '')}
+          onFocus={(e) => {
+            setQuery(value || '')
+            setOpen(true)
+            setHighlighted(0)
+            e.target.select()
+          }}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); setHighlighted(0) }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
@@ -88,7 +96,14 @@ export default function TickerCombobox({ tickers, value, onChange, id }) {
               onMouseDown={() => select(t)}
               onMouseEnter={() => setHighlighted(i)}
             >
-              {t}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{t}</span>
+                {tickerNames?.[t] && (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85em', marginLeft: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tickerNames[t]}
+                  </span>
+                )}
+              </div>
             </li>
           ))}
           {tickers.length > MAX_RESULTS && filtered.length === MAX_RESULTS && (

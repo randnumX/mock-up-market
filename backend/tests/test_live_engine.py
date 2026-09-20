@@ -57,3 +57,19 @@ def test_summarize_session_includes_derived_fields():
     assert "equity" in summary
     assert "roi" in summary
     assert "open_position_value" in summary
+
+
+def test_delete_session_removes_it_from_mongo():
+    db = make_db()
+    session = store.create_session(db, ticker="SBIN", strategy="rsi", mode="paper", capital=50000)
+    store.stop_session(db, session["_id"])
+
+    deleted = store.delete_session(db, session["_id"])
+
+    assert deleted is True
+    assert store.get_session(db, session["_id"]) is None
+
+
+def test_delete_session_returns_false_for_unknown_id():
+    db = make_db()
+    assert store.delete_session(db, "does-not-exist") is False

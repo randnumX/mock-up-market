@@ -15,7 +15,9 @@ class DummyProvider(DataProvider):
     def get_tickers(self):
         return get_dummy_tickers()
 
-    def get_history(self, ticker, days=365, from_date=None, to_date=None):
+    def get_history(self, ticker, days=365, from_date=None, to_date=None, interval="day"):
+        # Synthetic data is always daily GBM bars - `interval` is accepted
+        # for interface parity with the other providers but has no effect.
         if not (from_date or to_date):
             return generate_stock_data(ticker, days=days)
 

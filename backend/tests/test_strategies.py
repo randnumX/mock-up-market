@@ -14,9 +14,8 @@ STRATEGIES = [MACDStrategy, RSIStrategy, SMACrossoverStrategy, BollingerBandsStr
 def test_strategy_runs_end_to_end_and_returns_complete_results(StrategyClass):
     df = generate_stock_data("SBIN", days=300, seed=42)
     broker = SimulatedBroker(100000)
-    strategy = StrategyClass(broker)
-    runner = BacktestRunner(broker, strategy)
-    runner.load_data(df)
+    runner = BacktestRunner(broker, StrategyClass)
+    runner.load_data("SBIN", df)
     results = runner.run()
 
     expected_keys = {
@@ -33,9 +32,8 @@ def test_strategy_runs_end_to_end_and_returns_complete_results(StrategyClass):
 def test_strategy_never_oversells_a_position(StrategyClass):
     df = generate_stock_data("RELIANCE", days=300, seed=7)
     broker = SimulatedBroker(50000)
-    strategy = StrategyClass(broker)
-    runner = BacktestRunner(broker, strategy)
-    runner.load_data(df)
+    runner = BacktestRunner(broker, StrategyClass)
+    runner.load_data("RELIANCE", df)
     runner.run()
 
     for trade in broker.history:

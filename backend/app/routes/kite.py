@@ -61,6 +61,32 @@ def kite_sync():
     req = request.json or {}
     tickers = req.get("tickers") or DEFAULT_TICKERS
     days = int(req.get("days", 730))
+    intervals = req.get("intervals", ["day", "5minute", "15minute"])
 
-    result = fetch_and_store(kite, db, tickers=tickers, days=days)
-    return jsonify(result)
+    from app.live.ticker import _broadcast
+    import threading
+
+    def _sync_background():
+        def on_progress(ticker, current, total):
+            _broadcast({
+                "type": "sync_progress",
+                "ticker": ticker,
+                "current": current,
+                "total": total
+            })
+            
+        try:
+            total_result = {"synced": [], "failed": [], "total_candles": 0}
+            for interval in intervals:
+                res = fetch_and_store(kite, db, tickers=tickers, days=days, interval=interval, progress=on_progress)
+                total_result["synced"].extend(res["synced"])
+                total_result["failed"].extend(res["failed"])
+                total_result["total_candles"] += res["total_candles"]
+            _broadcast({"type": "sync_complete", "result": total_result})
+        except Exception as e:
+            _broadcast({"type": "sync_error", "error": str(e)})
+
+    thread = threading.Thread(target=_sync_background, daemon=True)
+    thread.start()
+
+    return jsonify({"message": "Sync started in background", "total": len(tickers)})

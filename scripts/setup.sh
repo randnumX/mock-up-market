@@ -27,7 +27,14 @@ echo -e "${BOLD}Checking prerequisites...${RESET}"
 if command -v python3 >/dev/null 2>&1; then
     ok "python3 found ($(python3 --version 2>&1))"
 else
-    fail "python3 not found - install Python 3.10+ before continuing (https://www.python.org/downloads/)"
+    fail "python3 not found - install Python 3.12+ before continuing (https://www.python.org/downloads/)"
+    exit 1
+fi
+
+if command -v uv >/dev/null 2>&1; then
+    ok "uv found ($(uv --version 2>&1))"
+else
+    fail "uv not found - install it before continuing: https://docs.astral.sh/uv/getting-started/installation/"
     exit 1
 fi
 
@@ -62,19 +69,11 @@ else
 fi
 echo ""
 
-# ----- 3. Backend venv + deps -----
+# ----- 3. Backend deps -----
 echo -e "${BOLD}Setting up backend...${RESET}"
 cd "$ROOT_DIR/backend"
-if [ ! -d .venv ]; then
-    python3 -m venv .venv
-    ok "Created virtualenv"
-else
-    ok "Virtualenv already exists"
-fi
-source .venv/bin/activate
-pip install -r requirements.txt --quiet
-ok "Backend dependencies installed"
-deactivate
+uv sync --locked --quiet
+ok "Backend dependencies installed (.venv created/updated automatically by uv)"
 echo ""
 
 # ----- 4. Frontend deps -----
@@ -100,7 +99,7 @@ echo ""
 echo "Run the app (pick one):"
 echo ""
 echo -e "  ${BOLD}Native (fastest for development):${RESET}"
-echo "    Terminal 1: cd backend && source .venv/bin/activate && python run.py"
+echo "    Terminal 1: cd backend && uv run python run.py"
 echo "    Terminal 2: cd frontend && npm run dev"
 echo "    Dashboard:  http://localhost:5173"
 echo ""
