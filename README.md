@@ -14,25 +14,29 @@ A production-grade algorithmic trading engine for the Indian stock market (NSE) 
 
 ## Quick Start
 
+**Prerequisites**: Python 3.10+, Node.js 20+. Docker is optional but recommended (unlocks MongoDB, real ticker sync, and Live Trading — the app runs fully without it too, on synthetic data).
+
 ```bash
-# One-command setup
-chmod +x scripts/setup.sh && ./scripts/setup.sh
-
-# Start Backend (Terminal 1)
-cd backend
-source .venv/bin/activate
-python run.py
-
-# Start Frontend (Terminal 2)
-cd frontend
-npm run dev
+./scripts/setup.sh
 ```
 
-Open **http://localhost:5173** in your browser.
+Safe to re-run any time — every step skips or no-ops if it's already done, so it doubles as a "did I set everything up right?" check. It checks your prerequisites, creates `backend/.env` from `.env.example` if missing, sets up the backend virtualenv + dependencies, installs frontend dependencies, and (if Docker is available) starts MongoDB.
+
+Then start the app:
+
+```bash
+# Terminal 1
+cd backend && source .venv/bin/activate && python run.py
+
+# Terminal 2
+cd frontend && npm run dev
+```
+
+Open **http://localhost:5173** in your browser. (Or skip both terminals and run everything containerized — see [Full Docker Deployment](#full-docker-deployment-backend--frontend--mongo) below.)
 
 ## Local MongoDB (optional, required for Live Trading)
 
-The app works fully without MongoDB (synthetic data, backtesting only). To enable real ticker sync and the Live Trading engine, run Mongo locally via Docker instead of installing it as a native binary:
+`scripts/setup.sh` already does this for you if Docker is installed. To manage it manually:
 
 ```bash
 docker compose up -d      # starts MongoDB in the background
