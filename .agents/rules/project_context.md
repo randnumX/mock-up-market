@@ -46,7 +46,7 @@ Vite + React single-page application.
 
 - **Components**: Header, StatusBadge, ConfigPanel, KiteConnect, MetricsGrid, EquityChart (TradingView lightweight-charts), TradeLog
 - **Hooks**: `useBacktest`, `useTickers`, `useHealth`, `useStrategies`, `useKite`
-- **Design**: Premium dark mode with glassmorphism, Inter font, CSS custom properties
+- **Design**: Premium dark mode with glassmorphism, Inter font, CSS custom properties. Color tokens (`frontend/src/index.css` `:root`) follow finance-standard convention on purpose: `--positive`/`--negative` are true green/red (non-negotiable in this domain), `--accent` is a blue distinct from both so UI chrome is never mistaken for a P&L signal, body text/backgrounds are neutral slate grays
 - **Dev Server**: Port 5173 with Vite proxy to Flask backend on port 5000
 
 ### Key Design Decisions
@@ -58,9 +58,10 @@ Vite + React single-page application.
 - **Tested**: `backend/tests/` (pytest) covers taxes, broker, all four strategies end-to-end, and provider availability/fallback behavior
 
 ### Deployment
-- `docker-compose.yml` — `mongo` has no profile (always available via plain `docker compose up -d`, for local hybrid dev); `backend`/`frontend` are tagged `profiles: ["full"]`, opt-in via `docker compose --profile full up --build`, so the two workflows coexist without either breaking the other
-- `backend/Dockerfile` — runs `gunicorn --workers 1 --threads 4`. The single-worker count is load-bearing, not a default left unconsidered: `app/live/engine.py`'s scheduler is an in-process singleton, and >1 worker would each run their own copy and multiply every live session's trades
+- `docker-compose.yml` — three coexisting modes via profiles: no profile (plain `docker compose up -d`) starts only `mongo`, for local hybrid dev; `profiles: ["full"]` (`backend`/`frontend`, ports 3000/5000) is a production-shaped build (gunicorn + nginx-static, no hot reload); `profiles: ["dev"]` (`backend-dev`/`frontend-dev`, ports 3001/5001) bind-mounts source into plain `python`/`node` images and runs the same dev servers the native workflow uses, so Flask's debug reloader and Vite's HMR work inside containers too
+- `backend/Dockerfile` (the `full` profile's build) runs `gunicorn --workers 1 --threads 4`. The single-worker count is load-bearing, not a default left unconsidered: `app/live/engine.py`'s scheduler is an in-process singleton, and >1 worker would each run their own copy and multiply every live session's trades. `backend-dev` (the `dev` profile) runs `python run.py` directly instead, so this constraint doesn't apply there
 - `frontend/Dockerfile` — multi-stage (Vite build → nginx); `frontend/nginx.conf` proxies `/api/*` to the backend container with `proxy_buffering off` so the SSE backtest stream (`/api/backtest/stream`) actually streams through nginx instead of arriving all at once
+- `frontend/vite.config.js`'s proxy target reads `VITE_PROXY_TARGET` (falls back to `http://localhost:5000` for native dev) - `frontend-dev` sets it to `http://backend-dev:5000` since `localhost` inside a container refers to itself, not the backend container; `server.host: true` is also required so the dev server is reachable through the container's port mapping at all
 
 ### Legacy Code
 `AlgoTrading/` (original scripts) and `api/` (original Flask stub) have been removed — both were explicitly superseded by `backend/` and fully duplicated by `app/engine/` + the providers layer. If reference material from them is ever needed again, it's recoverable from git history prior to their removal.

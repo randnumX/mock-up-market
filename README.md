@@ -61,6 +61,20 @@ Two things worth knowing about the containerized backend:
 - It runs with `gunicorn --workers 1` **deliberately, not as an oversight** — the live-trading scheduler (`app/live/engine.py`) is an in-process singleton; more than one worker would each run their own copy and tick every live session multiple times. `--threads 4` still gives it request concurrency without that problem. Scale horizontally (multiple containers behind a load balancer) rather than via `--workers` if you need more throughput.
 - Kite Connect credentials, if you have them, pass through via host environment variables (`KITE_API_KEY`, `KITE_API_SECRET`, etc. — see `docker-compose.yml`); nothing is baked into the image.
 
+This mode has **no hot reload** — both images are built once (frontend to static files, backend to a fixed code snapshot), so a code change needs `--build` again to show up. It's meant for verifying the app works the way it'll actually be deployed, not as an edit-save-refresh loop. For that, use native `python run.py` / `npm run dev`, or the `dev` profile below if you want the containers themselves to reload.
+
+## Docker Dev Mode (hot reload)
+
+A third mode, for when you want containers but still want to edit-save-see-it-update: `backend-dev`/`frontend-dev` bind-mount your source straight into plain `python`/`node` images (no custom Dockerfile, no rebuild step) and run the same dev servers the native workflow uses — Flask's debug reloader and Vite's HMR both work exactly as they do natively, just inside containers.
+
+```bash
+docker compose --profile dev up --build -d
+# Dashboard: http://localhost:3001   API: http://localhost:5001
+docker compose --profile dev down
+```
+
+Different host ports (3001/5001) than the `full` profile (3000/5000) on purpose, so `dev` and `full` can even run side by side if you want to compare them. `frontend-dev`'s `node_modules` lives in a named Docker volume, not your host filesystem — keeps container-installed (Linux) native deps from colliding with whatever's already in your host `frontend/node_modules` if you also run things natively.
+
 ## Real Market Data (Zerodha Kite Connect)
 
 1. Create an app at [developers.kite.trade](https://developers.kite.trade/apps) (₹2000/month subscription). Set its **Redirect URL** to `http://localhost:5000/api/kite/callback`.
