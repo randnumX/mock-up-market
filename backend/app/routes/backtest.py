@@ -7,6 +7,8 @@ from app.engine.backtester import BacktestRunner
 from app.engine.registry import STRATEGIES, STRATEGY_META
 from app.engine.position_sizing import build_sizer
 from app.data.providers.registry import get_history_with_fallback
+from app.data.db import get_db
+from app.data import backtest_store
 
 backtest_bp = Blueprint('backtest', __name__)
 
@@ -186,19 +188,77 @@ def run_backtest_stream():
     if error:
         return error
 
+    # Persist run history server-side when MongoDB is available, so an
+    # archived run's status/result is authoritative and survives a page
+    # refresh or the browser being closed entirely - optional, since
+    # backtesting itself has no MongoDB dependency.
+    db = get_db()
+    run_id = None
+    if db is not None:
+        run_id = backtest_store.create_run(db, ticker, strategy_name, {
+            "capital": capital, "from_date": from_date, "to_date": to_date,
+            "interval": interval, "position_sizing": position_sizing,
+            "max_capital_per_trade": max_capital_per_trade, "daily_loss_limit": daily_loss_limit,
+        })
+
     def generate():
-        for event in runner.run_streaming():
-            if event["type"] == "done":
-                event["result"]["data_source"] = data_source
-                event["result"]["ticker"] = ticker
-                event["result"]["strategy"] = strategy_name
-            yield f"data: {json.dumps(event, cls=NumpyEncoder)}\n\n"
+        last_index, last_total, completed = 0, 0, False
+        try:
+            for event in runner.run_streaming():
+                if event["type"] == "tick":
+                    last_index, last_total = event["index"], event["total"]
+                if event["type"] == "done":
+                    event["result"]["data_source"] = data_source
+                    event["result"]["ticker"] = ticker
+                    event["result"]["strategy"] = strategy_name
+                    if db is not None and run_id:
+                        # Round-trip through the same NumpyEncoder used for the
+                        # SSE payload so numpy scalars (from round()/pandas)
+                        # never hit pymongo, which can't serialize them.
+                        sanitized = json.loads(json.dumps(event["result"], cls=NumpyEncoder))
+                        backtest_store.complete_run(db, run_id, sanitized)
+                    completed = True
+                if run_id:
+                    event["run_id"] = run_id
+                yield f"data: {json.dumps(event, cls=NumpyEncoder)}\n\n"
+        finally:
+            # Runs if the generator is closed early too (client disconnect,
+            # e.g. a page refresh mid-stream) - Python delivers GeneratorExit
+            # at the yield point, and finally still executes. This is how an
+            # interrupted run gets marked accurately even though no more
+            # code after the yield ever runs normally.
+            if db is not None and run_id and not completed:
+                progress = round((last_index + 1) / last_total * 100) if last_total else 0
+                backtest_store.fail_run(db, run_id, "Interrupted before completion", progress=progress)
 
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+
+@backtest_bp.route('/api/backtest/runs', methods=['GET'])
+def list_backtest_runs():
+    db = get_db()
+    if db is None:
+        return jsonify({"runs": [], "db_available": False})
+    runs = backtest_store.list_runs(db)
+    for r in runs:
+        r["id"] = r.pop("_id")
+        if "error_msg" in r:
+            r["errorMsg"] = r.pop("error_msg")
+    return jsonify({"runs": runs, "db_available": True})
+
+
+@backtest_bp.route('/api/backtest/runs/<run_id>', methods=['DELETE'])
+def delete_backtest_run(run_id):
+    db = get_db()
+    if db is None:
+        return jsonify({"error": "MongoDB unavailable"}), 503
+    if not backtest_store.delete_run(db, run_id):
+        return jsonify({"error": "Run not found"}), 404
+    return jsonify({"deleted": True})
 
 
 @backtest_bp.route('/api/strategies', methods=['GET'])

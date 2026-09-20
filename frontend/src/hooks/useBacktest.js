@@ -9,43 +9,77 @@ const API_BASE = '/api'
  * in place during a run (`status: 'streaming'`) and is replaced by the
  * final, authoritative result (identical shape to the plain POST
  * /api/backtest endpoint) once the "done" event arrives.
+ *
+ * Run history is authoritative on the server (MongoDB, via
+ * GET/DELETE /api/backtest/runs) when available - the backend persists each
+ * run's status as it streams and detects a mid-stream disconnect itself, so
+ * a refresh/closed tab/restart no longer desyncs or loses a run's state.
+ * Falls back to localStorage (this app's original behavior) only when
+ * MongoDB isn't available, since backtesting itself has no MongoDB
+ * dependency and should keep working zero-setup.
  */
 export function useBacktest() {
-  const [resultsList, setResultsList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('backtest_results')
-      if (!saved) return []
-      const parsed = JSON.parse(saved)
-      // A 'streaming' entry only means anything while its EventSource is
-      // alive in memory - that connection doesn't survive a page refresh,
-      // so any entry still marked 'streaming' on load is a run that was
-      // interrupted, not one still in progress. Reconcile it now instead
-      // of leaving a permanently frozen "0%, streaming" row.
-      return parsed.map(res => res.status === 'streaming'
-        ? { ...res, status: 'error', errorMsg: 'Interrupted by page refresh' }
-        : res)
-    } catch (e) {
-      console.error('Failed to parse cached backtest results', e)
-    }
-    return []
-  })
+  const [resultsList, setResultsList] = useState([])
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
 
+  const dbAvailableRef = useRef(false)
+  const esRef = useRef(null)
+
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/backtest/runs`)
+        const data = await res.json()
+        if (cancelled) return
+        dbAvailableRef.current = !!data.db_available
+        if (data.db_available) {
+          setResultsList(data.runs || [])
+          return
+        }
+      } catch (e) {
+        console.error('Failed to fetch backtest run history from the server', e)
+      }
+      if (cancelled) return
+      // No MongoDB (or the request failed) - fall back to localStorage.
+      try {
+        const saved = localStorage.getItem('backtest_results')
+        if (!saved) return
+        const parsed = JSON.parse(saved)
+        // A 'streaming' entry only means anything while its EventSource is
+        // alive in memory - that connection doesn't survive a page refresh,
+        // so any entry still marked 'streaming' on load is a run that was
+        // interrupted, not one still in progress.
+        setResultsList(parsed.map(res => res.status === 'streaming'
+          ? { ...res, status: 'error', errorMsg: 'Interrupted by page refresh' }
+          : res))
+      } catch (e) {
+        console.error('Failed to parse cached backtest results', e)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // Only mirror to localStorage while running without MongoDB - once the
+  // server is the source of truth, localStorage would just be a second,
+  // increasingly stale copy nothing reads from again.
+  useEffect(() => {
+    if (dbAvailableRef.current) return
     localStorage.setItem('backtest_results', JSON.stringify(resultsList))
   }, [resultsList])
 
-  // Refs for tracking currently streaming data
-  const streamRef = useRef(null)
-  const resultsRef = useRef(resultsList)
-
-  useEffect(() => {
-    resultsRef.current = resultsList
-  }, [resultsList])
-
-  const esRef = useRef(null)
+  const refetchRuns = useCallback(async () => {
+    if (!dbAvailableRef.current) return
+    try {
+      const res = await fetch(`${API_BASE}/backtest/runs`)
+      const data = await res.json()
+      setResultsList(data.runs || [])
+    } catch (e) {
+      console.error('Failed to refresh backtest run history', e)
+    }
+  }, [])
 
   const runBacktest = useCallback(async ({ tickers, capital, strategy, from_date, to_date, position_sizing, interval, max_capital_per_trade, daily_loss_limit }) => {
     esRef.current?.close()
@@ -56,10 +90,10 @@ export function useBacktest() {
 
     // We send a single request for the entire portfolio
     const combinedTickers = tickers.join(',')
-    const runId = Date.now() // Unique ID for this run
+    const tempId = `pending-${Date.now()}` // swapped for the real DB id once the server assigns one
 
     const newEntry = {
-      id: runId,
+      id: tempId,
       ticker: combinedTickers,
       strategy,
       equity_curve: [],
@@ -94,55 +128,87 @@ export function useBacktest() {
 
       const es = new EventSource(`${API_BASE}/backtest/stream?${params}`)
       esRef.current = es
+      let realId = tempId
 
       es.onmessage = (msg) => {
         const event = JSON.parse(msg.data)
+        if (event.run_id) realId = event.run_id
 
         if (event.type === 'tick') {
           setProgress(Math.round(((event.index + 1) / event.total) * 100))
           setResultsList(prev => prev.map(res => {
-            if (res.id !== runId) return res
+            if (res.id !== tempId && res.id !== realId) return res
             return {
               ...res,
+              id: realId,
               equity_curve: [...res.equity_curve, event.point],
               trades: event.new_trades.length ? [...res.trades, ...event.new_trades] : res.trades,
             }
           }))
         } else if (event.type === 'done') {
           setResultsList(prev => prev.map(res => {
-            if (res.id !== runId) return res
-            return { ...res, ...event.result, status: 'done' }
+            if (res.id !== tempId && res.id !== realId) return res
+            return { ...res, ...event.result, id: realId, status: 'done' }
           }))
           setProgress(100)
           es.close()
           resolve()
+          refetchRuns() // reconcile with the DB-persisted, authoritative copy
         }
       }
 
       es.onerror = () => {
         setResultsList(prev => prev.map(res => {
-          if (res.id !== runId) return res
-          return { ...res, status: 'error', errorMsg: 'Stream failed' }
+          if (res.id !== tempId && res.id !== realId) return res
+          return { ...res, id: realId, status: 'error', errorMsg: 'Stream failed' }
         }))
         es.close()
         resolve()
+        // Give the backend's disconnect-cleanup a moment to persist the
+        // interruption (it runs in a `finally` once the connection drops),
+        // then pull the authoritative record instead of trusting our guess.
+        setTimeout(refetchRuns, 800)
       }
     })
 
     setLoading(false)
-  }, [])
+  }, [refetchRuns])
 
-  const deleteResult = useCallback((id) => {
+  const deleteResult = useCallback(async (id) => {
     setResultsList(prev => prev.filter(res => res.id !== id))
+    if (dbAvailableRef.current && !String(id).startsWith('pending-')) {
+      try {
+        await fetch(`${API_BASE}/backtest/runs/${id}`, { method: 'DELETE' })
+      } catch (e) {
+        console.error('Failed to delete backtest run', e)
+      }
+    }
   }, [])
 
-  const deleteResults = useCallback((ids) => {
+  const deleteResults = useCallback(async (ids) => {
     const idSet = new Set(ids)
     setResultsList(prev => prev.filter(res => !idSet.has(res.id)))
+    if (dbAvailableRef.current) {
+      await Promise.all(
+        ids.filter(id => !String(id).startsWith('pending-')).map(id =>
+          fetch(`${API_BASE}/backtest/runs/${id}`, { method: 'DELETE' }).catch(e => console.error('Failed to delete backtest run', e))
+        )
+      )
+    }
   }, [])
 
   const clearArchivedResults = useCallback(() => {
-    setResultsList(prev => prev.filter(res => res.status === 'streaming' || res.status === 'pending'))
+    setResultsList(prev => {
+      const archived = prev.filter(res => res.status === 'done' || res.status === 'error')
+      if (dbAvailableRef.current) {
+        Promise.all(
+          archived.filter(res => !String(res.id).startsWith('pending-')).map(res =>
+            fetch(`${API_BASE}/backtest/runs/${res.id}`, { method: 'DELETE' }).catch(e => console.error('Failed to delete backtest run', e))
+          )
+        )
+      }
+      return prev.filter(res => res.status === 'streaming' || res.status === 'pending')
+    })
   }, [])
 
   return { resultsList, loading, progress, error, runBacktest, deleteResult, deleteResults, clearArchivedResults }

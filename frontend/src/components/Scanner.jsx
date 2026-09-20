@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Play, Square, Activity, X } from 'lucide-react'
+import { Play, Square, Activity } from 'lucide-react'
 import { fmtINR } from '../utils/format'
 import { useLive } from '../hooks/useLive'
-import TickerCombobox from './TickerCombobox'
+import TickerMultiSelect from './TickerMultiSelect'
 
 export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
   const [active, setActive] = useState(false)
@@ -79,38 +79,6 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
     }
   }
 
-  const [tickerToAdd, setTickerToAdd] = useState('')
-  const [invalidTickers, setInvalidTickers] = useState([])
-
-  const handleAddTicker = () => {
-    const inputs = tickerToAdd.split(',').map(t => t.trim().toUpperCase()).filter(t => t)
-    const valid = []
-    const invalid = []
-    
-    inputs.forEach(t => {
-      if (tickers.includes(t)) {
-        if (!watchlist.includes(t) && !valid.includes(t)) {
-          valid.push(t)
-        }
-      } else {
-        invalid.push(t)
-      }
-    })
-    
-    if (valid.length > 0) {
-      setWatchlist([...watchlist, ...valid])
-    }
-    
-    setInvalidTickers(invalid)
-    if (invalid.length === 0) {
-      setTickerToAdd('')
-    }
-  }
-
-  const handleRemoveTicker = (t) => {
-    setWatchlist(watchlist.filter(x => x !== t))
-  }
-
   return (
     <div className="animate-in">
       <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
@@ -155,109 +123,15 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
           </div>
           <div>
             <label className="form-label">Watchlist ({watchlist.length} Tickers)</label>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.25rem', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <textarea 
-                  className="form-input" 
-                  placeholder="Paste comma-separated tickers (e.g. RELIANCE, INFY)" 
-                  value={tickerToAdd} 
-                  onChange={(e) => { setTickerToAdd(e.target.value); setInvalidTickers([]) }}
-                  rows={2}
-                  style={{ resize: 'none' }}
-                  disabled={active}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <button 
-                  onClick={handleAddTicker} 
-                  className="btn-secondary"
-                  disabled={active || !tickerToAdd}
-                >
-                  Add
-                </button>
-                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  <button 
-                    onClick={() => { setWatchlist(tickers); setInvalidTickers([]) }} 
-                    className="btn-secondary"
-                    disabled={active}
-                    title="Add all synced tickers"
-                    style={{ flex: 1, padding: '0.25rem' }}
-                  >
-                    All
-                  </button>
-                  <button 
-                    onClick={() => { setWatchlist([]); setInvalidTickers([]) }} 
-                    className="btn-secondary"
-                    disabled={active || watchlist.length === 0}
-                    style={{ flex: 1, padding: '0.25rem', color: 'var(--negative)', borderColor: 'var(--negative)' }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            {invalidTickers.length > 0 && (
-              <div className="form-hint" style={{ color: 'var(--negative)', marginBottom: '0.5rem' }}>
-                Invalid tickers ignored: {invalidTickers.join(', ')}
-              </div>
-            )}
-            
-            <div style={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              gap: '0.4rem', 
-              maxHeight: '120px', 
-              overflowY: 'auto',
-              padding: '0.25rem',
-              backgroundColor: 'rgba(0,0,0,0.1)',
-              borderRadius: '4px',
-              border: '1px solid var(--border-color)'
-            }}>
-              {watchlist.length === 0 && <span className="form-hint" style={{ padding: '0.25rem' }}>No tickers selected. Add some to start scanning.</span>}
-              {watchlist.length === tickers.length && tickers.length > 0 && (
-                <span className="form-hint" style={{ padding: '0.25rem', color: 'var(--text-primary)' }}>
-                  Scanning all {tickers.length} synced tickers.
-                </span>
-              )}
-              {watchlist.length > 0 && watchlist.length < tickers.length && (
-                <>
-                  {watchlist.slice(0, 30).map(t => (
-                    <div key={t} style={{
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '0.25rem', 
-                      background: 'var(--surface-color)', 
-                      padding: '0.1rem 0.4rem', 
-                      borderRadius: '12px',
-                      fontSize: '0.8rem',
-                      border: '1px solid var(--border-color)'
-                    }}>
-                      {t}
-                      {!active && (
-                        <button 
-                          onClick={() => handleRemoveTicker(t)} 
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {watchlist.length > 30 && (
-                    <div style={{
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      padding: '0.1rem 0.4rem', 
-                      fontSize: '0.8rem',
-                      color: 'var(--text-muted)'
-                    }}>
-                      + {watchlist.length - 30} more...
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <TickerMultiSelect
+              tickers={tickers}
+              tickerNames={tickerNames}
+              value={watchlist}
+              onChange={setWatchlist}
+              placeholder="Search a ticker or paste a comma-separated list..."
+              disabled={active}
+              showBulkActions
+            />
           </div>
         </div>
 

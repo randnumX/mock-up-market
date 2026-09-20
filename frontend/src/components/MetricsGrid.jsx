@@ -34,6 +34,40 @@ function StreamingMetrics({ results, progress }) {
   )
 }
 
+function IncompleteMetrics({ results }) {
+  const curve = results.equity_curve || []
+  const lastPoint = curve[curve.length - 1]
+  const hasProgress = typeof results.progress === 'number'
+
+  return (
+    <div className="metrics-grid animate-in">
+      <div className="metric-card streaming-metric-card">
+        <div className="metric-label">Run Didn't Finish</div>
+        <div className="metric-value" style={{ color: 'var(--negative)', fontSize: '1rem' }}>
+          {results.errorMsg || 'No final results available'}
+        </div>
+        {hasProgress && (
+          <div className="metric-sub">Stopped at {results.progress}% through the run</div>
+        )}
+      </div>
+      <div className="metric-card">
+        <div className="metric-label">Last Known Equity</div>
+        <div className="metric-value accent">{lastPoint ? fmtINR(lastPoint.equity) : '—'}</div>
+        <div className="metric-sub">{curve.length} bar{curve.length !== 1 ? 's' : ''} captured before it stopped</div>
+      </div>
+      <div className="metric-card">
+        <div className="metric-label">Trades Captured</div>
+        <div className="metric-value accent">{(results.trades || []).length}</div>
+      </div>
+      <div className="metric-card">
+        <div className="metric-label">Ticker / Strategy</div>
+        <div className="metric-value" style={{ fontSize: '1.15rem' }}>{results.ticker}</div>
+        <div className="metric-sub">{results.strategy}</div>
+      </div>
+    </div>
+  )
+}
+
 function OverallSummary({ results }) {
   const overallPnl = results.final_capital - results.initial_capital
   const isGain = overallPnl >= 0
@@ -59,6 +93,7 @@ function OverallSummary({ results }) {
 export default function MetricsGrid({ results, progress, drilldownTicker = 'ALL' }) {
   if (!results) return null
   if (results.status === 'streaming') return <StreamingMetrics results={results} progress={progress} />
+  if (results.final_capital === undefined) return <IncompleteMetrics results={results} />
 
   if (drilldownTicker !== 'ALL' && results.ticker_stats && results.ticker_stats[drilldownTicker]) {
     const stats = results.ticker_stats[drilldownTicker]

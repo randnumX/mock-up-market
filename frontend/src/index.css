@@ -437,6 +437,45 @@ body {
   color: var(--text-muted);
 }
 
+.ticker-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 0.4rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.ticker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.ticker-chip button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ticker-chip button:hover {
+  color: var(--negative);
+}
+
 /* ===== Button ===== */
 .btn-primary {
   width: 100%;

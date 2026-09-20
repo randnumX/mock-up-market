@@ -9,6 +9,23 @@ const parseDate = (dateStr) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// parseDate truncates full timestamps to a calendar day. Two source points
+// with different times on the same day (e.g. mixed data providers storing
+// "day" bars with different times-of-day) can collapse to the same display
+// time - lightweight-charts requires strictly ascending, unique times, so
+// collapse any repeats here, keeping the latest value for that day.
+const dedupeByTime = (points) => {
+  const out = []
+  for (const p of points) {
+    if (out.length > 0 && out[out.length - 1].time === p.time) {
+      out[out.length - 1] = p
+    } else {
+      out.push(p)
+    }
+  }
+  return out
+}
+
 // lightweight-charts takes literal colors, not CSS variables, so it can't
 // just inherit the page's theme - these mirror index.css's two palettes
 // and get picked by theme at chart-creation time (see the effect below).
@@ -57,6 +74,7 @@ export default function EquityChart({ results, drilldownTicker = 'ALL' }) {
   const seriesInstance = useRef(null)
   const markersPlugin = useRef(null)
   const lastCurveLen = useRef(0)
+  const lastChartTime = useRef(null)
   const colorsRef = useRef(CHART_PALETTES.dark)
   const [activeTab, setActiveTab] = useState('equity')
   const { theme } = useTheme()
@@ -117,12 +135,15 @@ export default function EquityChart({ results, drilldownTicker = 'ALL' }) {
       : (results?.equity_curve || [])
       
     const valueKey = currentTab === 'equity' ? 'equity' : 'price'
-    const initialData = curve
-      .map((p) => ({ time: parseDate(p.time), value: p[valueKey] }))
-      .filter((p) => p.time !== null)
-      
+    const initialData = dedupeByTime(
+      curve
+        .map((p) => ({ time: parseDate(p.time), value: p[valueKey] }))
+        .filter((p) => p.time !== null)
+    )
+
     series.setData(initialData)
     lastCurveLen.current = curve.length
+    lastChartTime.current = initialData.length > 0 ? initialData[initialData.length - 1].time : null
 
     markersPlugin.current = currentTab === 'price' ? createSeriesMarkers(series, []) : null
     if (markersPlugin.current) {
@@ -159,12 +180,22 @@ export default function EquityChart({ results, drilldownTicker = 'ALL' }) {
       seriesInstance.current.setData([])
       markersPlugin.current?.setMarkers([])
       lastCurveLen.current = 0
+      lastChartTime.current = null
     }
 
-    const newPoints = curve.slice(lastCurveLen.current)
+    const newPoints = dedupeByTime(
+      curve.slice(lastCurveLen.current)
+        .map((p) => ({ time: parseDate(p.time), value: p[valueKey] }))
+        .filter((p) => p.time !== null)
+    )
     for (const p of newPoints) {
-      const time = parseDate(p.time)
-      if (time) seriesInstance.current.update({ time, value: p[valueKey] })
+      // Skip a point that would go backwards relative to what's already on
+      // the chart (possible right after the dedupe above merges what would
+      // otherwise be two separate updates) - lightweight-charts only allows
+      // updating the most recent bar or appending a later one.
+      if (lastChartTime.current && p.time < lastChartTime.current) continue
+      seriesInstance.current.update(p)
+      lastChartTime.current = p.time
     }
     lastCurveLen.current = curve.length
 
@@ -200,7 +231,7 @@ export default function EquityChart({ results, drilldownTicker = 'ALL' }) {
         <span>
           {isDrilldown ? `Price + Signals: ${drilldownTicker}` : (currentTab === 'equity' ? 'Portfolio Equity Curve' : 'Price Chart with Trade Signals')}
         </span>
-        {results.status === 'streaming' && <span className="live-pill">● LIVE</span>}
+        {(results.status === 'streaming' || results.status === 'running') && <span className="live-pill">● LIVE</span>}
       </div>
       
       {!isDrilldown && (

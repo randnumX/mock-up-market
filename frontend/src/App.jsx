@@ -12,6 +12,7 @@ import LiveTrading from './components/LiveTrading'
 import Scanner from './components/Scanner'
 import Movers from './components/Movers'
 import TickerModal from './components/TickerModal'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useBacktest, useTickers, useHealth } from './hooks/useBacktest'
 
 export default function App() {
@@ -98,14 +99,24 @@ export default function App() {
                     <button className="btn-secondary" onClick={() => setSelectedResultIndex(null)} style={{ marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                       <ArrowLeft size={16} /> Back to Dashboard
                     </button>
+                    <ErrorBoundary onReset={() => setSelectedResultIndex(null)}>
                     {(() => {
                       const res = resultsList[selectedResultIndex];
+                      if (!res) {
+                        return (
+                          <div className="glass-card animate-in">
+                            <div className="card-title">Run Not Found</div>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>This run no longer exists (it may have been deleted).</p>
+                          </div>
+                        )
+                      }
+                      const tickerStr = typeof res.ticker === 'string' ? res.ticker : ''
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <h2 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                               <span style={{ color: 'var(--brand-blue)', wordBreak: 'break-all' }}>
-                                {res.ticker.length > 100 ? `${res.ticker.substring(0, 100)}... (${res.ticker.split(',').length} tickers)` : res.ticker}
+                                {tickerStr.length > 100 ? `${tickerStr.substring(0, 100)}... (${tickerStr.split(',').length} tickers)` : (tickerStr || 'Unknown')}
                               </span>
                               <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal', whiteSpace: 'nowrap' }}>— {res.strategy}</span>
                             </h2>
@@ -136,7 +147,17 @@ export default function App() {
                             </div>
                           )}
 
-                          {res.status !== 'pending' && res.status !== 'error' && (
+                          {res.status === 'error' && (
+                            <div className="glass-card animate-in" style={{ borderColor: 'var(--negative)' }}>
+                              <div className="card-title" style={{ color: 'var(--negative)' }}>Run Didn't Complete</div>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                                {res.errorMsg || 'This run stopped before finishing.'}
+                                {res.equity_curve?.length > 0 && ' Showing whatever data was captured before it stopped.'}
+                              </p>
+                            </div>
+                          )}
+
+                          {res.status !== 'pending' && (
                             <>
                               {res.ticker.split(',').length > 1 && (
                                 <div style={{ marginTop: '1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -190,6 +211,7 @@ export default function App() {
                         </div>
                       )
                     })()}
+                    </ErrorBoundary>
                   </div>
                 ) : (
                   <div className="glass-card animate-in" style={{ padding: '0' }}>
@@ -296,7 +318,12 @@ export default function App() {
                                             )}
                                             {isArchive && (
                                               <td style={{ padding: '1rem 1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                {res.id ? new Date(res.id).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Unknown'}
+                                                {(() => {
+                                                  // created_at (ISO string) comes from DB-backed runs; a raw
+                                                  // numeric res.id is the old localStorage-fallback timestamp.
+                                                  const d = new Date(res.created_at || res.id)
+                                                  return isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                                                })()}
                                               </td>
                                             )}
                                             <td style={{ padding: '1rem 1.5rem', maxWidth: '300px' }}>

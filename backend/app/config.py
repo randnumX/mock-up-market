@@ -12,6 +12,7 @@ class Config:
     COLLECTION_TIMESERIES = 'StockPriceDataTimeSeries'
     COLLECTION_HISTORICAL = 'LastOneYearStockData'
     COLLECTION_LIVE_SESSIONS = 'LiveSessions'
+    COLLECTION_BACKTEST_RUNS = 'BacktestRuns'
 
     # Live trading engine
     LIVE_POLL_INTERVAL_SECONDS = int(os.getenv('LIVE_POLL_INTERVAL_SECONDS', '30'))

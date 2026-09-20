@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
 import PositionSizingControls from './PositionSizingControls'
+import TickerMultiSelect from './TickerMultiSelect'
 
 const isoDate = (d) => d.toISOString().slice(0, 10)
 
@@ -16,8 +17,7 @@ export default function ConfigPanel({ tickers, tickerNames, loading, onRun }) {
   const [capital, setCapital] = useState(100000)
   const [maxCapitalPerTrade, setMaxCapitalPerTrade] = useState('')
   const [dailyLossLimit, setDailyLossLimit] = useState('')
-  const [tickerInput, setTickerInput] = useState('')
-  const [invalidTickers, setInvalidTickers] = useState([])
+  const [selectedTickers, setSelectedTickers] = useState([])
   const [strategy, setStrategy] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -44,36 +44,14 @@ export default function ConfigPanel({ tickers, tickerNames, loading, onRun }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    
-    let inputs = []
-    if (tickerInput.trim()) {
-      inputs = tickerInput.split(',').map(t => t.trim().toUpperCase()).filter(t => t)
-    }
-    
-    if (inputs.length === 0) {
-      alert("Please enter at least one Ticker")
-      return
-    }
-    
-    const valid = []
-    const invalid = []
-    
-    inputs.forEach(t => {
-      if (tickers.includes(t)) {
-        if (!valid.includes(t)) valid.push(t)
-      } else {
-        invalid.push(t)
-      }
-    })
-    
-    setInvalidTickers(invalid)
-    
-    if (valid.length === 0) {
+
+    if (selectedTickers.length === 0) {
+      alert("Please select at least one Ticker")
       return
     }
 
     onRun({
-      tickers: valid,
+      tickers: selectedTickers,
       capital,
       strategy,
       interval,
@@ -130,22 +108,15 @@ export default function ConfigPanel({ tickers, tickerNames, loading, onRun }) {
 
         <div className="form-group">
           <label className="form-label">Tickers</label>
-          <textarea 
-            className="form-input" 
-            placeholder="Paste comma-separated tickers (e.g. RELIANCE, INFY)" 
-            value={tickerInput} 
-            onChange={(e) => { setTickerInput(e.target.value); setInvalidTickers([]) }}
-            rows={2}
-            style={{ resize: 'none' }}
-            required
+          <TickerMultiSelect
+            tickers={tickers}
+            tickerNames={tickerNames}
+            value={selectedTickers}
+            onChange={setSelectedTickers}
+            placeholder="Search a ticker or paste a comma-separated list..."
           />
-          {invalidTickers.length > 0 && (
-            <div className="form-hint" style={{ color: 'var(--negative)', marginTop: '0.5rem' }}>
-              Invalid tickers ignored: {invalidTickers.join(', ')}
-            </div>
-          )}
           <p className="form-hint" style={{ marginTop: '0.25rem' }}>
-            A separate backtest will be run for each valid ticker.
+            All selected tickers run together as one portfolio backtest, sharing a single capital pool.
           </p>
         </div>
 

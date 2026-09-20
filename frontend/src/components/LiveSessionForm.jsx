@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, TriangleAlert, Play } from 'lucide-react'
 import { useStrategies } from '../hooks/useBacktest'
 import PositionSizingControls from './PositionSizingControls'
+import TickerMultiSelect from './TickerMultiSelect'
 
 export default function LiveSessionForm({ tickers, tickerNames, kiteConnected, onCreate, creating, error }) {
   const [strategy, setStrategy] = useState('')
@@ -18,63 +19,31 @@ export default function LiveSessionForm({ tickers, tickerNames, kiteConnected, o
 
   const isLive = mode === 'live'
 
-  const [tickerInput, setTickerInput] = useState('')
-  const [invalidTickers, setInvalidTickers] = useState([])
+  const [selectedTickers, setSelectedTickers] = useState([])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    let inputs = []
-    if (tickerInput.trim()) {
-      inputs = tickerInput.split(',').map(t => t.trim().toUpperCase()).filter(t => t)
-    }
-    
-    if (inputs.length === 0) {
-      alert("Please enter at least one Ticker")
-      setInvalidTickers([])
-      return
-    }
-    
-    const valid = []
-    const invalid = []
-    
-    inputs.forEach(t => {
-      if (tickers.includes(t)) {
-        if (!valid.includes(t)) valid.push(t)
-      } else {
-        invalid.push(t)
-      }
-    })
-    
-    setInvalidTickers(invalid)
-    
-    if (valid.length === 0) {
+
+    if (selectedTickers.length === 0) {
+      alert("Please select at least one Ticker")
       return
     }
 
-    let allOk = true
-    for (const t of valid) {
-      const ok = await onCreate({
-        ticker: t,
-        strategy,
-        interval,
-        capital: Number(capital),
-        mode,
-        max_capital_per_trade: maxCapitalPerTrade ? Number(maxCapitalPerTrade) : null,
-        daily_loss_limit: dailyLossLimit ? Number(dailyLossLimit) : null,
-        position_sizing: positionSizing.mode === 'full' ? undefined : positionSizing,
-        confirm: isLive ? confirmed : undefined,
-      })
-      if (!ok) {
-        allOk = false
-      }
-    }
-    
-    if (allOk) {
+    const ok = await onCreate({
+      tickers: selectedTickers,
+      strategy,
+      interval,
+      capital: Number(capital),
+      mode,
+      max_capital_per_trade: maxCapitalPerTrade ? Number(maxCapitalPerTrade) : null,
+      daily_loss_limit: dailyLossLimit ? Number(dailyLossLimit) : null,
+      position_sizing: positionSizing.mode === 'full' ? undefined : positionSizing,
+      confirm: isLive ? confirmed : undefined,
+    })
+
+    if (ok) {
       setConfirmed(false)
-      if (tickerInput.trim()) {
-        setTickerInput('')
-      }
+      setSelectedTickers([])
       setStrategy('')
       setIntervalVal('')
     }
@@ -106,22 +75,15 @@ export default function LiveSessionForm({ tickers, tickerNames, kiteConnected, o
 
         <div className="form-group">
           <label className="form-label">Tickers</label>
-          <textarea 
-            className="form-input" 
-            placeholder="Paste comma-separated tickers (e.g. RELIANCE, INFY)" 
-            value={tickerInput} 
-            onChange={(e) => { setTickerInput(e.target.value); setInvalidTickers([]) }}
-            rows={2}
-            style={{ resize: 'none' }}
-            required
+          <TickerMultiSelect
+            tickers={tickers}
+            tickerNames={tickerNames}
+            value={selectedTickers}
+            onChange={setSelectedTickers}
+            placeholder="Search a ticker or paste a comma-separated list..."
           />
-          {invalidTickers.length > 0 && (
-            <div className="form-hint" style={{ color: 'var(--negative)', marginTop: '0.5rem' }}>
-              Invalid tickers ignored: {invalidTickers.join(', ')}
-            </div>
-          )}
           <p className="form-hint" style={{ marginTop: '0.25rem' }}>
-            A separate live session will be started for each valid ticker.
+            All selected tickers run together as one session, sharing a single capital pool - same as a multi-ticker backtest.
           </p>
         </div>
 

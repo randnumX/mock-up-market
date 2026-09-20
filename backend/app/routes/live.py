@@ -40,7 +40,10 @@ def create_session():
         return jsonify({"error": "MongoDB is required for live trading sessions (state must survive restarts)."}), 503
 
     req = request.json or {}
-    ticker = req.get("ticker")
+    tickers = req.get("tickers")
+    if not tickers and req.get("ticker"):
+        raw = req["ticker"]
+        tickers = raw if isinstance(raw, list) else [t.strip() for t in raw.split(',') if t.strip()]
     strategy = req.get("strategy")
     interval = req.get("interval", "day")
     mode = req.get("mode", "paper")
@@ -50,8 +53,8 @@ def create_session():
     position_sizing = req.get("position_sizing")
     confirm = req.get("confirm", False)
 
-    if not ticker or not strategy:
-        return jsonify({"error": "ticker and strategy are required"}), 400
+    if not tickers or not strategy:
+        return jsonify({"error": "tickers and strategy are required"}), 400
     if strategy not in STRATEGIES:
         return jsonify({"error": f"Unknown strategy: {strategy}"}), 400
     if mode not in ("paper", "live"):
@@ -80,7 +83,7 @@ def create_session():
         daily_loss_limit = float(daily_loss_limit)
 
     session = store.create_session(
-        db, ticker, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing, interval
+        db, tickers, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing, interval
     )
     return jsonify(summarize_session(session)), 201
 

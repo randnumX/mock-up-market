@@ -129,14 +129,18 @@ def _run_scanner_tick():
         df = pd.DataFrame(bars)
         
         if interval != "day" and not df.empty:
-            freq_map = {"minute": "1T", "3minute": "3T", "5minute": "5T", "10minute": "10T", "15minute": "15T", "30minute": "30T", "60minute": "60T"}
+            # pandas dropped the "T" minute alias in favor of "min".
+            freq_map = {"minute": "1min", "3minute": "3min", "5minute": "5min", "10minute": "10min", "15minute": "15min", "30minute": "30min", "60minute": "60min"}
             freq = freq_map.get(interval)
             if freq:
                 if "Open" not in df.columns: df["Open"] = df["Value"]
                 if "High" not in df.columns: df["High"] = df["Value"]
                 if "Low" not in df.columns: df["Low"] = df["Value"]
                 
-                df["priceDate"] = pd.to_datetime(df["priceDate"])
+                # Mixed formats are possible here too (freshly-appended ticks
+                # vs. previously-resampled/historical bars) - see engine.py's
+                # identical fix for why format="mixed" is needed.
+                df["priceDate"] = pd.to_datetime(df["priceDate"], format="mixed", utc=True)
                 df.set_index("priceDate", inplace=True)
                 df = df.resample(freq).agg({
                     "scripName": "first",
