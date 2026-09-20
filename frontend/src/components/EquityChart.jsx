@@ -14,7 +14,7 @@ const toMarker = (t) => {
   return {
     time,
     position: t.type === 'BUY' ? 'belowBar' : 'aboveBar',
-    color: t.type === 'BUY' ? '#83b692' : '#f9627d',
+    color: t.type === 'BUY' ? '#10b981' : '#f59e0b',
     shape: t.type === 'BUY' ? 'arrowUp' : 'arrowDown',
     text: t.type,
   }
@@ -51,8 +51,8 @@ export default function EquityChart({ results }) {
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
-        horzLine: { color: 'rgba(131,182,146,0.4)', width: 1, style: 2 },
+        vertLine: { color: 'rgba(59,130,246,0.4)', width: 1, style: 2 },
+        horzLine: { color: 'rgba(59,130,246,0.4)', width: 1, style: 2 },
       },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
       timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: false },
@@ -62,15 +62,15 @@ export default function EquityChart({ results }) {
 
     const series = activeTab === 'equity'
       ? chart.addSeries(AreaSeries, {
-        topColor: 'rgba(131, 182, 146, 0.35)',
-        bottomColor: 'rgba(131, 182, 146, 0.0)',
-        lineColor: '#83b692',
+        topColor: 'rgba(59, 130, 246, 0.35)',
+        bottomColor: 'rgba(59, 130, 246, 0.0)',
+        lineColor: '#3b82f6',
         lineWidth: 2,
       })
       : chart.addSeries(AreaSeries, {
-        topColor: 'rgba(198, 91, 124, 0.3)',
-        bottomColor: 'rgba(198, 91, 124, 0.0)',
-        lineColor: '#c65b7c',
+        topColor: 'rgba(139, 92, 246, 0.3)',
+        bottomColor: 'rgba(139, 92, 246, 0.0)',
+        lineColor: '#8b5cf6',
         lineWidth: 2,
       })
 
