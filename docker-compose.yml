@@ -28,17 +28,11 @@ services:
         condition: service_healthy
     ports:
       - "5000:5000"
-    environment:
-      MONGO_URI: mongodb://mongo:27017
-      DB_NAME: ${DB_NAME:-AlgoTradingSource}
-      FLASK_PORT: 5000
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-this-in-production}
-      CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:5173
-      KITE_ALLOW: ${KITE_ALLOW:-true}
-      KITE_API_KEY: ${KITE_API_KEY:-}
-      KITE_API_SECRET: ${KITE_API_SECRET:-}
-      KITE_REDIRECT_URL: ${KITE_REDIRECT_URL:-http://localhost:5000/api/kite/callback}
-      KITE_FRONTEND_URL: ${KITE_FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./backend/logs:/app/logs
+      - kite_session:/app/.kite_session
+    env_file:
+      - ./backend/.env.prod
 
   frontend:
     build: ./frontend
@@ -49,6 +43,8 @@ services:
       - backend
     ports:
       - "3000:80"
+    env_file:
+      - ./frontend/.env.prod
 
   # Hot-reload dev mode: bind-mounts source into plain python/node images
   # instead of building a custom image, so Flask's debug reloader and
@@ -69,18 +65,13 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    env_file:
+      - ./backend/.env.dev
     environment:
+      # Override MONGO_URI: .env.dev uses localhost but inside Docker the
+      # Mongo container is reachable by its service name, not localhost.
       MONGO_URI: mongodb://mongo:27017
-      DB_NAME: ${DB_NAME:-AlgoTradingSource}
-      FLASK_PORT: 5000
-      FLASK_DEBUG: "true"
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-this-in-production}
-      CORS_ORIGINS: http://localhost:3001,http://localhost:5173
-      KITE_ALLOW: ${KITE_ALLOW:-true}
-      KITE_API_KEY: ${KITE_API_KEY:-}
-      KITE_API_SECRET: ${KITE_API_SECRET:-}
-      KITE_REDIRECT_URL: ${KITE_REDIRECT_URL:-http://localhost:5001/api/kite/callback}
-      KITE_FRONTEND_URL: ${KITE_FRONTEND_URL:-http://localhost:3001}
+      VITE_PROXY_TARGET: http://backend-dev:5000
     command: sh -c "uv sync && uv run python run.py"
 
   frontend-dev:
@@ -90,22 +81,16 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
-      # Named volume layered over node_modules so npm install writes go
-      # here, not onto the host bind mount - keeps linux-built native
-      # deps (e.g. anything with prebuilt binaries) from clobbering
-      # whatever's already in your host frontend/node_modules, and
-      # vice versa.
       - frontend_node_modules_dev:/app/node_modules
     ports:
       - "3001:5173"
+    env_file:
+      - ./frontend/.env.dev
     environment:
+      # Override: inside Docker the backend is reachable by service name
       VITE_PROXY_TARGET: http://backend-dev:5000
     depends_on:
       - backend-dev
-    # npm ci, not npm install: installs strictly from the existing lockfile
-    # without ever rewriting it - npm install here would silently regenerate
-    # package-lock.json through the bind mount using this container's (older)
-    # npm on every start, clobbering metadata the host's npm had written.
     command: sh -c "npm ci && npm run dev"
 
 # WARNING: volumes are NOT scoped to a profile. `docker compose --profile
@@ -119,3 +104,4 @@ volumes:
   mongo_data:
   frontend_node_modules_dev:
   backend_venv_dev:
+  kite_session:

@@ -10,6 +10,8 @@ build/
 
 # Environment
 .env
+.env.dev
+.env.prod
 !.env.example
 
 # IDE
@@ -23,6 +25,7 @@ Thumbs.db
 
 # Logs
 *.log
+backend/logs/
 
 # Kite Connect session (daily access token, never commit)
 backend/.kite_session.json
