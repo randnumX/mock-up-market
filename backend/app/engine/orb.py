@@ -33,9 +33,10 @@ class ORBStrategy(Strategy):
         date_str = timestamp[:10]
         time_str = timestamp[11:16] if len(timestamp) > 10 else "00:00"
 
-        # Initialize columns
-        if i == 0:
+        # Ensure indicator columns exist regardless of index position.
+        if "orb_high" not in df.columns:
             df["orb_high"] = pd.Series(dtype="float64")
+        if "orb_low" not in df.columns:
             df["orb_low"] = pd.Series(dtype="float64")
 
         # Reset at the start of a new day

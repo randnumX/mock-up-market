@@ -12,6 +12,7 @@ from app.engine.vwap import VWAPStrategy
 from app.engine.orb import ORBStrategy
 from app.engine.rsi_scalp import RSIScalpStrategy
 from app.engine.ema_scalp import EMAScalpStrategy
+from app.engine.data_collector import DataCollectionStrategy
 
 STRATEGIES = {
     "macd": MACDStrategy,
@@ -22,6 +23,7 @@ STRATEGIES = {
     "orb": ORBStrategy,
     "rsi_scalp": RSIScalpStrategy,
     "ema_scalp": EMAScalpStrategy,
+    "data_collection": DataCollectionStrategy,
 }
 
 STRATEGY_META = [
@@ -33,4 +35,5 @@ STRATEGY_META = [
     {"id": "orb", "label": "15-Min ORB (Breakout)", "description": "Intraday: buys if price breaks 15-min high, shorts if price breaks 15-min low. Auto-closes at EOD."},
     {"id": "rsi_scalp", "label": "RSI Scalper (5-Min)", "description": "Intraday: buys when RSI < 20 (oversold) and sells on mean reversion (RSI > 50)."},
     {"id": "ema_scalp", "label": "EMA Momentum (9/21)", "description": "Intraday: buys when 9 EMA crosses above 21 EMA. Sells instantly when price closes below 9 EMA."},
+    {"id": "data_collection", "label": "Data Collection Only", "description": "Null strategy. Does not trade. Used purely to harvest live ticks and save bars to MongoDB."},
 ]

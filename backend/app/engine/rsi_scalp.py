@@ -24,9 +24,13 @@ class RSIScalpStrategy(Strategy):
         price = row["Value"]
         timestamp = str(row["priceDate"])
 
-        if i == 0:
+        # Ensure indicator columns exist regardless of index position.
+        if "change" not in df.columns:
             df["change"] = pd.Series(dtype="float64")
+        if "rsi" not in df.columns:
             df["rsi"] = pd.Series(dtype="float64")
+
+        if i == 0:
             df.loc[i, "change"] = 0.0
             df.loc[i, "rsi"] = 50.0
             return

@@ -23,8 +23,10 @@ class SMACrossoverStrategy(Strategy):
         price = row["Value"]
         timestamp = row["priceDate"]
 
-        if i == 0:
+        # Ensure indicator columns exist regardless of index position.
+        if "sma_fast" not in df.columns:
             df["sma_fast"] = pd.Series(dtype="float64")
+        if "sma_slow" not in df.columns:
             df["sma_slow"] = pd.Series(dtype="float64")
 
         df.loc[i, "sma_fast"] = df["Value"].iloc[max(0, i - self.fast_period + 1): i + 1].mean()

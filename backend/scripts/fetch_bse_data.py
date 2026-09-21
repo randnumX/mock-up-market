@@ -123,14 +123,24 @@ def fetch_and_store(db, tickers, flag="12M", delay=0.3, progress=None):
             failed.append({"ticker": ticker, "reason": "not found in Equity.csv"})
             continue
         try:
+            # Smart Sync: Check DB for the most recent date we already have for daily interval
+            latest_doc = collection.find_one(
+                {"scripName": ticker, "$or": [{"interval": "day"}, {"interval": {"$exists": False}}]},
+                sort=[("priceDate", -1)]
+            )
+            last_date_str = latest_doc["priceDate"] if latest_doc and "priceDate" in latest_doc else None
+
             docs = fetch_ticker(ticker, scrip_code, flag=flag)
             if not docs:
                 failed.append({"ticker": ticker, "reason": "no usable data points returned"})
             else:
-                collection.delete_many({"scripName": ticker})
-                collection.insert_many(docs)
-                synced.append(ticker)
-                total_candles += len(docs)
+                if last_date_str:
+                    docs = [d for d in docs if d["priceDate"] > last_date_str]
+                
+                if docs:
+                    collection.insert_many(docs)
+                    synced.append(ticker)
+                    total_candles += len(docs)
         except Exception as e:
             failed.append({"ticker": ticker, "reason": str(e)})
 

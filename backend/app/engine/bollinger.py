@@ -25,9 +25,12 @@ class BollingerBandsStrategy(Strategy):
         price = row["Value"]
         timestamp = row["priceDate"]
 
-        if i == 0:
+        # Ensure indicator columns exist regardless of index position.
+        if "bb_mid" not in df.columns:
             df["bb_mid"] = pd.Series(dtype="float64")
+        if "bb_upper" not in df.columns:
             df["bb_upper"] = pd.Series(dtype="float64")
+        if "bb_lower" not in df.columns:
             df["bb_lower"] = pd.Series(dtype="float64")
 
         window = df["Value"].iloc[max(0, i - self.period + 1): i + 1]

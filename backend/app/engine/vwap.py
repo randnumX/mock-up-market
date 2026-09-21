@@ -33,8 +33,8 @@ class VWAPStrategy(Strategy):
         date_str = timestamp[:10]
         time_str = timestamp[11:16] if len(timestamp) > 10 else "00:00"
 
-        # Initialize indicator columns on first bar
-        if i == 0:
+        # Ensure indicator columns exist regardless of index position.
+        if "vwap" not in df.columns:
             df["vwap"] = pd.Series(dtype="float64")
 
         # Reset VWAP at the start of a new day
