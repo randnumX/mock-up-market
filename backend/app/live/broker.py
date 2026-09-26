@@ -27,7 +27,7 @@ class PaperBroker(SimulatedBroker):
 class KiteLiveBroker:
     mode = "live"
 
-    def __init__(self, kite, capital, max_capital_per_trade=None):
+    def __init__(self, kite, capital, max_capital_per_trade=None, is_intraday=False):
         self.kite = kite
         self.initial_capital = capital
         self.capital = capital
@@ -36,11 +36,16 @@ class KiteLiveBroker:
         self.realized_pnl = 0
         self.total_taxes = 0
         self.max_capital_per_trade = max_capital_per_trade
+        # Decides PRODUCT_MIS vs PRODUCT_CNC on the real order below.
+        self.is_intraday = is_intraday
 
-    def place_order(self, order_type, symbol, price, quantity, timestamp, is_intraday=False):
+    def place_order(self, order_type, symbol, price, quantity, timestamp, is_intraday=None):
+        if is_intraday is None:
+            is_intraday = self.is_intraday
         if order_type == "SELL":
-            pos = self.positions.get(symbol, {"qty": 0})
-            quantity = min(quantity, pos["qty"])
+            pos = self.positions.get(symbol, {"qty": 0, "avg_price": 0})
+            if not is_intraday:
+                quantity = min(quantity, max(0, pos["qty"]))
         elif self.max_capital_per_trade:
             quantity = min(quantity, int(self.max_capital_per_trade // price))
 
@@ -67,26 +72,95 @@ class KiteLiveBroker:
             })
             return False
 
-        # Best-effort local mirror for the dashboard; Kite's own positions()
-        # call remains the authoritative source of truth.
+        # Best-effort local mirror for the dashboard
+        from app.utils.taxes import calculate_taxes
+        pos = self.positions.get(symbol, {"qty": 0, "avg_price": 0})
+        
         if order_type == "BUY":
-            cost = price * quantity
-            self.capital -= cost
-            pos = self.positions.get(symbol, {"qty": 0, "avg_price": 0})
-            total_cost = pos["qty"] * pos["avg_price"] + cost
-            new_qty = pos["qty"] + quantity
-            self.positions[symbol] = {"qty": new_qty, "avg_price": total_cost / new_qty if new_qty else 0}
-        else:
-            pos = self.positions.get(symbol, {"qty": 0, "avg_price": 0})
-            pos["qty"] = max(0, pos["qty"] - quantity)
-            if pos["qty"] == 0:
-                self.positions.pop(symbol, None)
+            if pos["qty"] < 0:
+                # Cover short
+                cover_qty = min(quantity, -pos["qty"])
+                short_avg_price = pos["avg_price"]
+                self.capital -= price * cover_qty
+                
+                tax_details = calculate_taxes(price, short_avg_price, cover_qty, is_intraday)
+                self.capital -= tax_details["total_charges"]
+                self.realized_pnl += tax_details["net_profit"]
+                self.total_taxes += tax_details["total_charges"]
+                
+                new_qty = pos["qty"] + cover_qty
+                if new_qty == 0:
+                    self.positions.pop(symbol, None)
+                else:
+                    self.positions[symbol] = {"qty": new_qty, "avg_price": short_avg_price}
+                
+                self.history.append({
+                    "type": "BUY", "symbol": symbol, "price": price, "qty": cover_qty,
+                    "timestamp": str(timestamp), "pnl": round(tax_details["net_profit"], 2),
+                    "taxes": round(tax_details["total_charges"], 2)
+                })
+                # if there is remaining quantity, it becomes a new long (rare but handled if needed)
+                if quantity > cover_qty:
+                    rem_qty = quantity - cover_qty
+                    cost = price * rem_qty
+                    self.capital -= cost
+                    self.positions[symbol] = {"qty": rem_qty, "avg_price": price}
+                    self.history.append({
+                        "type": "BUY", "symbol": symbol, "price": price, "qty": rem_qty,
+                        "timestamp": str(timestamp)
+                    })
             else:
-                self.positions[symbol] = pos
-            self.capital += price * quantity
-
-        self.history.append({
-            "type": order_type, "symbol": symbol, "price": price, "qty": quantity,
-            "timestamp": str(timestamp),
-        })
+                # Open or add to long
+                cost = price * quantity
+                self.capital -= cost
+                total_cost = pos["qty"] * pos["avg_price"] + cost
+                new_qty = pos["qty"] + quantity
+                self.positions[symbol] = {"qty": new_qty, "avg_price": total_cost / new_qty}
+                self.history.append({
+                    "type": "BUY", "symbol": symbol, "price": price, "qty": quantity,
+                    "timestamp": str(timestamp)
+                })
+        else:
+            if pos["qty"] > 0:
+                # Sell long
+                sell_qty = min(quantity, pos["qty"])
+                self.capital += price * sell_qty
+                long_avg_price = pos["avg_price"]
+                
+                tax_details = calculate_taxes(long_avg_price, price, sell_qty, is_intraday)
+                self.capital -= tax_details["total_charges"]
+                self.realized_pnl += tax_details["net_profit"]
+                self.total_taxes += tax_details["total_charges"]
+                
+                new_qty = pos["qty"] - sell_qty
+                if new_qty == 0:
+                    self.positions.pop(symbol, None)
+                else:
+                    self.positions[symbol] = {"qty": new_qty, "avg_price": long_avg_price}
+                
+                self.history.append({
+                    "type": "SELL", "symbol": symbol, "price": price, "qty": sell_qty,
+                    "timestamp": str(timestamp), "pnl": round(tax_details["net_profit"], 2),
+                    "taxes": round(tax_details["total_charges"], 2)
+                })
+                
+                if quantity > sell_qty and is_intraday:
+                    rem_qty = quantity - sell_qty
+                    self.capital += price * rem_qty
+                    self.positions[symbol] = {"qty": -rem_qty, "avg_price": price}
+                    self.history.append({
+                        "type": "SELL", "symbol": symbol, "price": price, "qty": rem_qty,
+                        "timestamp": str(timestamp)
+                    })
+            else:
+                # Open or add to short
+                self.capital += price * quantity
+                existing_short_qty = -pos["qty"]
+                total_proceeds = existing_short_qty * pos["avg_price"] + quantity * price
+                new_short_qty = existing_short_qty + quantity
+                self.positions[symbol] = {"qty": -new_short_qty, "avg_price": total_proceeds / new_short_qty}
+                self.history.append({
+                    "type": "SELL", "symbol": symbol, "price": price, "qty": quantity,
+                    "timestamp": str(timestamp)
+                })
         return True

@@ -62,6 +62,10 @@ def list_runs(db):
     return list(db[Config.COLLECTION_BACKTEST_RUNS].find().sort("created_at", -1).limit(MAX_RUNS))
 
 
+def get_run(db, run_id):
+    return db[Config.COLLECTION_BACKTEST_RUNS].find_one({"_id": run_id})
+
+
 def delete_run(db, run_id):
     result = db[Config.COLLECTION_BACKTEST_RUNS].delete_one({"_id": run_id})
     return result.deleted_count > 0

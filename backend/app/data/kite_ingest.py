@@ -7,6 +7,7 @@ backtest engine and the frontend.
 """
 from datetime import datetime, timedelta
 from app.config import Config
+from app.utils.intervals import kite_max_days, INTRADAY_IDS
 
 # Default watchlist: the same large-cap NSE names the dummy-data generator
 # knows about, so the UI's ticker list stays meaningful either way.
@@ -42,9 +43,9 @@ def fetch_and_store(kite, db, tickers=None, days=730, interval="day", progress=N
     collection = db[Config.COLLECTION_HISTORICAL]
 
     to_date = datetime.now()
-    # Kite API limits intraday history (e.g. 5minute is max 100 days). Cap it if needed.
-    if interval in ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute"]:
-        days = min(days, 100 if interval != "minute" else 60)
+    # Kite API limits intraday history (e.g. 5minute is max 100 days).
+    if interval in INTRADAY_IDS:
+        days = min(days, kite_max_days(interval))
         
     from_date = to_date - timedelta(days=days)
 

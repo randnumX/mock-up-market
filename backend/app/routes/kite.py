@@ -3,6 +3,9 @@ from app.config import Config
 from app.data import kite_client
 from app.data.db import get_db
 from app.data.kite_ingest import fetch_and_store, DEFAULT_TICKERS
+from app.logging_config import get_logger
+
+logger = get_logger("routes.kite")
 
 kite_bp = Blueprint('kite', __name__)
 
@@ -33,18 +36,22 @@ def kite_callback():
     status = request.args.get('status')
 
     if status != 'success' or not request_token:
+        logger.warning("Kite login callback rejected: status=%s has_token=%s", status, bool(request_token))
         return redirect(f"{Config.KITE_FRONTEND_URL}/?kite=error")
 
     try:
         kite_client.complete_login(request_token)
+        logger.info("Kite CONNECTED - access token exchanged and cached")
         return redirect(f"{Config.KITE_FRONTEND_URL}/?kite=connected")
     except Exception:
+        logger.exception("Kite login failed while exchanging request_token")
         return redirect(f"{Config.KITE_FRONTEND_URL}/?kite=error")
 
 
 @kite_bp.route('/api/kite/disconnect', methods=['POST'])
 def kite_disconnect():
     kite_client.disconnect()
+    logger.info("Kite DISCONNECTED - cached session cleared")
     return jsonify({"disconnected": True})
 
 
@@ -75,6 +82,7 @@ def kite_sync():
                 "total": total
             })
             
+        logger.info("Kite sync STARTED tickers=%s days=%s intervals=%s", len(tickers), days, intervals)
         try:
             total_result = {"synced": [], "failed": [], "total_candles": 0}
             for interval in intervals:
@@ -82,8 +90,13 @@ def kite_sync():
                 total_result["synced"].extend(res["synced"])
                 total_result["failed"].extend(res["failed"])
                 total_result["total_candles"] += res["total_candles"]
+            logger.info(
+                "Kite sync COMPLETE synced=%s failed=%s candles=%s",
+                len(total_result["synced"]), len(total_result["failed"]), total_result["total_candles"],
+            )
             _broadcast({"type": "sync_complete", "result": total_result})
         except Exception as e:
+            logger.exception("Kite sync FAILED")
             _broadcast({"type": "sync_error", "error": str(e)})
 
     thread = threading.Thread(target=_sync_background, daemon=True)

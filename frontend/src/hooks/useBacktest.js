@@ -19,13 +19,42 @@ const API_BASE = '/api'
  * dependency and should keep working zero-setup.
  */
 export function useBacktest() {
-  const [resultsList, setResultsList] = useState([])
+  const [resultsList, setResultsList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('backtest_results')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // If the user refreshed while streaming, mark it as interrupted
+        return parsed.map(run => {
+          if (run.status === 'streaming') {
+            return { ...run, status: 'error', error: 'Run interrupted by page refresh.' }
+          }
+          return run
+        })
+      }
+    } catch (e) {
+      console.error('Failed to parse cached backtest results', e)
+    }
+    return []
+  })
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
 
   const dbAvailableRef = useRef(false)
   const esRef = useRef(null)
+
+  // Only mirror to localStorage while running without MongoDB - once the
+  // server is the source of truth, localStorage would just be a second,
+  // increasingly stale copy nothing reads from again.
+  useEffect(() => {
+    if (dbAvailableRef.current) return
+    localStorage.setItem('backtest_results', JSON.stringify(resultsList))
+  }, [resultsList])
+
+  const deleteRun = useCallback((id) => {
+    setResultsList(prev => prev.filter(run => run.id !== id))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -132,7 +161,10 @@ export function useBacktest() {
 
       es.onmessage = (msg) => {
         const event = JSON.parse(msg.data)
-        if (event.run_id) realId = event.run_id
+        if (event.run_id) {
+          realId = event.run_id
+          es.runId = realId
+        }
 
         if (event.type === 'tick') {
           setProgress(Math.round(((event.index + 1) / event.total) * 100))
@@ -174,6 +206,20 @@ export function useBacktest() {
     setLoading(false)
   }, [refetchRuns])
 
+  const fetchRunDetail = useCallback(async (id) => {
+    if (!dbAvailableRef.current || String(id).startsWith('pending-')) return null
+    try {
+      const res = await fetch(`${API_BASE}/backtest/runs/${id}`)
+      if (!res.ok) return null
+      const full = await res.json()
+      setResultsList(prev => prev.map(r => (r.id === id ? { ...r, ...full } : r)))
+      return full
+    } catch (e) {
+      console.error('Failed to load backtest run detail', e)
+      return null
+    }
+  }, [])
+
   const deleteResult = useCallback(async (id) => {
     setResultsList(prev => prev.filter(res => res.id !== id))
     if (dbAvailableRef.current && !String(id).startsWith('pending-')) {
@@ -211,7 +257,18 @@ export function useBacktest() {
     })
   }, [])
 
-  return { resultsList, loading, progress, error, runBacktest, deleteResult, deleteResults, clearArchivedResults }
+  // Poll for updates if any run is marked streaming but we don't have an active EventSource for it
+  useEffect(() => {
+    const hasOrphanedStream = resultsList.some(r => r.status === 'streaming' && r.id !== esRef.current?.runId);
+    if (!hasOrphanedStream || !dbAvailableRef.current) return;
+
+    const timer = setInterval(() => {
+      refetchRuns();
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [resultsList, refetchRuns]);
+
+  return { resultsList, loading, progress, error, runBacktest, fetchRunDetail, deleteResult, deleteResults, clearArchivedResults }
 }
 
 export function useTickers() {
@@ -272,6 +329,22 @@ export function useStrategies() {
   }, [])
 
   return { strategies, fetchStrategies }
+}
+
+export function useIntervals() {
+  const [intervals, setIntervals] = useState([])
+
+  const fetchIntervals = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/intervals`)
+      const data = await res.json()
+      setIntervals(data.intervals || [])
+    } catch {
+      setIntervals([{ id: 'day', label: 'Daily' }, { id: '5minute', label: '5 Minute' }, { id: '15minute', label: '15 Minute' }])
+    }
+  }, [])
+
+  return { intervals, fetchIntervals }
 }
 
 export function usePositionSizingModes() {

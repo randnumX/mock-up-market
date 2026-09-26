@@ -9,6 +9,10 @@ from app.engine.position_sizing import build_sizer
 from app.data.providers.registry import get_history_with_fallback
 from app.data.db import get_db
 from app.data import backtest_store
+from app.logging_config import get_logger
+from app.utils.intervals import INTERVALS
+
+logger = get_logger("routes.backtest")
 
 backtest_bp = Blueprint('backtest', __name__)
 
@@ -52,7 +56,7 @@ def _prepare_run(tickers_str, strategy_name, capital, source, from_date=None, to
     except (ValueError, TypeError) as e:
         return None, None, (jsonify({"error": str(e)}), 400)
 
-    broker = SimulatedBroker(capital, max_capital_per_trade)
+    broker = SimulatedBroker(capital, max_capital_per_trade, is_intraday=(interval != "day"))
     runner = BacktestRunner(broker, STRATEGIES[strategy_name], position_sizer=sizer, daily_loss_limit=daily_loss_limit)
     
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -201,6 +205,12 @@ def run_backtest_stream():
             "max_capital_per_trade": max_capital_per_trade, "daily_loss_limit": daily_loss_limit,
         })
 
+    logger.info(
+        "Backtest STARTED run_id=%s strategy=%s interval=%s capital=%s range=%s..%s tickers=%s source=%s",
+        run_id, strategy_name, interval, capital, from_date or "earliest", to_date or "latest",
+        len(ticker.split(",")), data_source,
+    )
+
     def generate():
         last_index, last_total, completed = 0, 0, False
         try:
@@ -218,6 +228,13 @@ def run_backtest_stream():
                         sanitized = json.loads(json.dumps(event["result"], cls=NumpyEncoder))
                         backtest_store.complete_run(db, run_id, sanitized)
                     completed = True
+                    r = event["result"]
+                    logger.info(
+                        "Backtest DONE run_id=%s roi=%.2f%% trades=%s win_rate=%.1f%% "
+                        "final_capital=%.2f max_dd=%.2f%%",
+                        run_id, r.get("roi", 0), r.get("total_trades", 0),
+                        r.get("win_rate", 0), r.get("final_capital", 0), r.get("max_drawdown", 0),
+                    )
                 if run_id:
                     event["run_id"] = run_id
                 yield f"data: {json.dumps(event, cls=NumpyEncoder)}\n\n"
@@ -230,6 +247,9 @@ def run_backtest_stream():
             if db is not None and run_id and not completed:
                 progress = round((last_index + 1) / last_total * 100) if last_total else 0
                 backtest_store.fail_run(db, run_id, "Interrupted before completion", progress=progress)
+                logger.warning(
+                    "Backtest INTERRUPTED run_id=%s at %s%% (client disconnected)", run_id, progress
+                )
 
     return Response(
         stream_with_context(generate()),
@@ -248,7 +268,27 @@ def list_backtest_runs():
         r["id"] = r.pop("_id")
         if "error_msg" in r:
             r["errorMsg"] = r.pop("error_msg")
+        # Summaries only. The heavy fields (a full equity curve and trade
+        # list per run) are what the dashboard table never shows, and
+        # shipping 50 runs' worth of them made this response six figures of
+        # bytes. The detail endpoint below serves them on demand.
+        for heavy in ("equity_curve", "trades", "ticker_stats"):
+            r.pop(heavy, None)
     return jsonify({"runs": runs, "db_available": True})
+
+
+@backtest_bp.route('/api/backtest/runs/<run_id>', methods=['GET'])
+def get_backtest_run(run_id):
+    db = get_db()
+    if db is None:
+        return jsonify({"error": "MongoDB unavailable"}), 503
+    run = backtest_store.get_run(db, run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+    run["id"] = run.pop("_id")
+    if "error_msg" in run:
+        run["errorMsg"] = run.pop("error_msg")
+    return jsonify(run)
 
 
 @backtest_bp.route('/api/backtest/runs/<run_id>', methods=['DELETE'])
@@ -264,6 +304,16 @@ def delete_backtest_run(run_id):
 @backtest_bp.route('/api/strategies', methods=['GET'])
 def list_strategies():
     return jsonify({"strategies": STRATEGY_META})
+
+
+@backtest_bp.route('/api/intervals', methods=['GET'])
+def list_intervals():
+    """Single source of truth for selectable bar intervals - the UI used to
+    hardcode a subset of these in three separate components."""
+    return jsonify({"intervals": [
+        {"id": i["id"], "label": i["label"], "intraday": i["id"] != "day"}
+        for i in INTERVALS
+    ]})
 
 
 @backtest_bp.route('/api/position-sizing-modes', methods=['GET'])

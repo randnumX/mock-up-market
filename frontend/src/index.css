@@ -1128,6 +1128,35 @@ body {
   color: var(--negative);
 }
 
+/* Makes it obvious at a glance whether a running session is trading on real
+   Zerodha ticks or the simulated fallback feed. */
+.data-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.data-source-live {
+  background: var(--positive-dim);
+  color: var(--positive);
+}
+
+.data-source-sim {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.data-source-pending {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+}
+
 .session-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

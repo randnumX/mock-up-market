@@ -6,6 +6,9 @@ from app.engine.position_sizing import build_sizer
 from app.live import store
 from app.live.engine import summarize_session
 from app.live.market_hours import is_market_open
+from app.logging_config import get_logger
+
+logger = get_logger("routes.live")
 
 live_bp = Blueprint('live', __name__)
 
@@ -85,6 +88,12 @@ def create_session():
     session = store.create_session(
         db, tickers, strategy, mode, capital, max_capital_per_trade, daily_loss_limit, position_sizing, interval
     )
+    logger.info(
+        "Session CREATED id=%s mode=%s strategy=%s interval=%s capital=%s tickers=%s(%s) "
+        "max_per_trade=%s daily_loss_limit=%s",
+        session["_id"], mode, strategy, interval, capital, len(tickers), ",".join(tickers[:5]),
+        max_capital_per_trade, daily_loss_limit,
+    )
     return jsonify(summarize_session(session)), 201
 
 
@@ -96,6 +105,7 @@ def stop_session(session_id):
     if not store.get_session(db, session_id):
         return jsonify({"error": "Session not found"}), 404
     store.stop_session(db, session_id, reason="Stopped by user")
+    logger.info("Session STOPPED id=%s (by user)", session_id)
     return jsonify({"stopped": True})
 
 
@@ -110,6 +120,7 @@ def delete_session(session_id):
     if session["status"] == "running":
         return jsonify({"error": "Stop the session before deleting it."}), 400
     store.delete_session(db, session_id)
+    logger.info("Session DELETED id=%s", session_id)
     return jsonify({"deleted": True})
 
 
@@ -120,4 +131,5 @@ def kill_all():
     if db is None:
         return jsonify({"error": "MongoDB unavailable"}), 503
     count = store.stop_all_sessions(db)
+    logger.warning("KILL SWITCH triggered - stopped %s running session(s)", count)
     return jsonify({"stopped": count})

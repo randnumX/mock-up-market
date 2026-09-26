@@ -1,7 +1,25 @@
 import { useState } from 'react'
-import { FileText, TriangleAlert, Square, Power, Zap, Trash2 } from 'lucide-react'
+import { FileText, TriangleAlert, Square, Power, Zap, Trash2, Radio, Shuffle } from 'lucide-react'
 import { fmtINR, signedINR } from '../utils/format'
 import EquityChart from './EquityChart'
+
+const DATA_SOURCE_BADGE = {
+  kite: { label: 'Zerodha Live Data', icon: Radio, cls: 'data-source-live' },
+  generated: { label: 'Simulated Data', icon: Shuffle, cls: 'data-source-sim' },
+}
+
+function DataSourceBadge({ dataSource }) {
+  const info = DATA_SOURCE_BADGE[dataSource]
+  if (!info) {
+    return <span className="data-source-pill data-source-pending">Waiting for first tick…</span>
+  }
+  const Icon = info.icon
+  return (
+    <span className={`data-source-pill ${info.cls}`} title={info.label}>
+      <Icon size={11} /> {info.label}
+    </span>
+  )
+}
 
 const STATUS_LABELS = {
   running: { label: 'Running', cls: 'online' },
@@ -65,9 +83,12 @@ function SessionCard({ session, onStop, onDelete, onSelectTicker }) {
           </span>
           <span className="session-strategy">{session.strategy}</span>
         </div>
-        <div className="kite-status-row">
-          <span className={`status-dot ${status.cls}`} />
-          <span>{status.label}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+          <div className="kite-status-row">
+            <span className={`status-dot ${status.cls}`} />
+            <span>{status.label}</span>
+          </div>
+          {session.status === 'running' && <DataSourceBadge dataSource={session.data_source} />}
         </div>
       </div>
 

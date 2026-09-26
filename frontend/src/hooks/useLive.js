@@ -63,13 +63,18 @@ export function useLive() {
     const res = await fetch(`${API_BASE}/live/sessions/${sessionId}`, { method: 'DELETE' })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed to delete session')
+    // Remove immediately from local state so the card vanishes at once,
+    // without waiting for the next SSE tick to re-render it.
+    setSessions(prev => prev.filter(s => s._id !== sessionId))
     await fetchSessions()
   }, [fetchSessions])
 
-  // Subscribe to real-time WebSocket ticks via Server-Sent Events
+  // Subscribe to real-time WebSocket ticks via Server-Sent Events.
+  // IMPORTANT: onmessage only updates price/equity fields on sessions that
+  // still exist in state — it must never re-add a session the user deleted.
   useEffect(() => {
     const eventSource = new EventSource(`${API_BASE}/stream`)
-    
+
     eventSource.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
@@ -80,7 +85,7 @@ export function useLive() {
             const open_cost = positions.reduce((sum, pos) => sum + (pos.qty * pos.avg_price), 0)
             const equity = (s.cash || 0) + open_value
             const roi = s.capital ? ((equity - s.capital) / s.capital * 100) : 0
-            
+
             return {
               ...s,
               last_price: data.price,
@@ -92,13 +97,21 @@ export function useLive() {
           }
           return s
         }))
-      } catch (err) {
+      } catch {
         // ignore parse errors (e.g. ping events)
       }
     }
-    
+
     return () => eventSource.close()
   }, [])
+
+  // Periodic poll: keep the session list in sync with the backend even if
+  // an SSE tick fires between a delete and the fetchSessions response.
+  useEffect(() => {
+    fetchSessions()
+    const id = setInterval(fetchSessions, 5000)
+    return () => clearInterval(id)
+  }, [fetchSessions])
 
   return {
     sessions, fetchSessions,

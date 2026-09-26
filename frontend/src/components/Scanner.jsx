@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Play, Square, Activity } from 'lucide-react'
 import { fmtINR } from '../utils/format'
 import { useLive } from '../hooks/useLive'
+import { useIntervals, useStrategies } from '../hooks/useBacktest'
 import TickerMultiSelect from './TickerMultiSelect'
 
 export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
@@ -11,7 +12,9 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
   const [signals, setSignals] = useState({})
   const [intervalVal, setIntervalVal] = useState('')
   
-  const { createSession } = useLive() // Reusing createSession from useLive to spawn a live trade!
+  const { createSession } = useLive()
+  const { intervals, fetchIntervals } = useIntervals()
+  const { strategies, fetchStrategies } = useStrategies()
 
   // Poll scanner state
   useEffect(() => {
@@ -36,6 +39,8 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
     }
     
     fetchScanner()
+    fetchIntervals()
+    fetchStrategies()
     const interval = setInterval(fetchScanner, 3000)
     return () => clearInterval(interval)
   }, [])
@@ -97,14 +102,12 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
               onChange={e => setStrategy(e.target.value)}
               disabled={active}
             >
+              {/* Ids from /api/strategies - the hardcoded list here used
+                  class names (MACDStrategy), which never matched the
+                  registry's ids (macd), so every scanner lookup returned
+                  None and the scanner silently did nothing. */}
               <option value="" disabled>Select a Strategy</option>
-              <option value="MACDStrategy">MACD Crossover</option>
-              <option value="SMACrossoverStrategy">SMA Crossover</option>
-              <option value="RSIStrategy">RSI Mean Reversion</option>
-              <option value="VWAPStrategy">VWAP Intraday</option>
-              <option value="ORBStrategy">15-Min ORB (Breakout)</option>
-              <option value="RSIScalpStrategy">RSI Scalper (5-Min)</option>
-              <option value="EMAScalpStrategy">EMA Momentum (9/21)</option>
+              {strategies.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
           <div>
@@ -116,9 +119,7 @@ export default function Scanner({ tickers, tickerNames, onSelectTicker }) {
               disabled={active}
             >
               <option value="" disabled>Select a Timeframe</option>
-              <option value="day">Daily</option>
-              <option value="5minute">5 Minute</option>
-              <option value="15minute">15 Minute</option>
+              {intervals.map((iv) => <option key={iv.id} value={iv.id}>{iv.label}</option>)}
             </select>
           </div>
           <div>

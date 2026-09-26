@@ -1,10 +1,10 @@
 import json
-import logging
+from app.logging_config import get_logger
 from queue import Queue, Empty
 from flask import Blueprint, Response, request
 from app.live.ticker import add_client, remove_client
 
-logger = logging.getLogger("stream")
+logger = get_logger("routes.stream")
 stream_bp = Blueprint('stream', __name__)
 
 @stream_bp.route('/api/stream')

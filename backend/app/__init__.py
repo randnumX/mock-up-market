@@ -5,6 +5,10 @@ from app.config import Config
 
 
 def create_app():
+    from app.logging_config import setup_logging, get_logger
+    setup_logging()
+    logger = get_logger("app")
+
     app = Flask(__name__)
     app.config.from_object(Config)
 
@@ -40,5 +44,10 @@ def create_app():
         start_scheduler()
         start_ticker_thread()
         start_scanner_scheduler()
+        logger.info(
+            "Background services started (live scheduler @%ss, kite ticker, scanner) | "
+            "kite_allow=%s db=%s",
+            Config.LIVE_POLL_INTERVAL_SECONDS, Config.KITE_ALLOW, Config.DB_NAME,
+        )
 
     return app

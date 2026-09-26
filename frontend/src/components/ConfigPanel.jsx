@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
-import { useStrategies } from '../hooks/useBacktest'
+import { useStrategies, useIntervals } from '../hooks/useBacktest'
 import PositionSizingControls from './PositionSizingControls'
 import TickerMultiSelect from './TickerMultiSelect'
 
@@ -24,10 +24,12 @@ export default function ConfigPanel({ tickers, tickerNames, loading, onRun }) {
   const [positionSizing, setPositionSizing] = useState({ mode: 'full' })
   const [interval, setIntervalVal] = useState('')
   const { strategies, fetchStrategies } = useStrategies()
+  const { intervals, fetchIntervals } = useIntervals()
 
   useEffect(() => {
     fetchStrategies()
-  }, [fetchStrategies])
+    fetchIntervals()
+  }, [fetchStrategies, fetchIntervals])
 
   const applyPreset = (days) => {
     if (days === null) {
@@ -147,9 +149,7 @@ export default function ConfigPanel({ tickers, tickerNames, loading, onRun }) {
             required
           >
             <option value="" disabled>Select a Timeframe</option>
-            <option value="day">Daily</option>
-            <option value="5minute">5 Minute</option>
-            <option value="15minute">15 Minute</option>
+            {intervals.map((iv) => <option key={iv.id} value={iv.id}>{iv.label}</option>)}
           </select>
           {interval && interval !== 'day' && (
             <p className="form-hint kite-warning" style={{marginTop: '0.5rem'}}>Intraday backtesting is limited to the last 100 days of history due to Kite API limits.</p>

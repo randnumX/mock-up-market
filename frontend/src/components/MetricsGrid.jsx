@@ -1,5 +1,22 @@
 import { fmtINR, signedINR } from '../utils/format'
 
+// A multi-ticker run's `ticker` field is the full raw comma-separated list
+// (could be hundreds of symbols) - shown as-is it overflows these fixed-size
+// cards. Show the first few plus a count instead, full list on hover.
+function TickerCell({ ticker }) {
+  const parts = (ticker || '').split(',').map((t) => t.trim()).filter(Boolean)
+  const display = parts.length > 3 ? `${parts.slice(0, 3).join(', ')} +${parts.length - 3} more` : ticker
+  return (
+    <div
+      className="metric-value"
+      style={{ fontSize: parts.length > 1 ? '0.95rem' : '1.15rem', wordBreak: 'break-word', lineHeight: 1.3 }}
+      title={ticker}
+    >
+      {display}
+    </div>
+  )
+}
+
 function StreamingMetrics({ results, progress }) {
   const lastPoint = results.equity_curve[results.equity_curve.length - 1]
   const equity = lastPoint?.equity ?? null
@@ -27,7 +44,7 @@ function StreamingMetrics({ results, progress }) {
       </div>
       <div className="metric-card">
         <div className="metric-label">Ticker / Strategy</div>
-        <div className="metric-value" style={{ fontSize: '1.15rem' }}>{results.ticker}</div>
+        <TickerCell ticker={results.ticker} />
         <div className="metric-sub">{results.strategy}</div>
       </div>
     </div>
@@ -61,7 +78,7 @@ function IncompleteMetrics({ results }) {
       </div>
       <div className="metric-card">
         <div className="metric-label">Ticker / Strategy</div>
-        <div className="metric-value" style={{ fontSize: '1.15rem' }}>{results.ticker}</div>
+        <TickerCell ticker={results.ticker} />
         <div className="metric-sub">{results.strategy}</div>
       </div>
     </div>

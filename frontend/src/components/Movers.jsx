@@ -1,5 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Copy, RefreshCw, Trophy, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react'
+import { Copy, RefreshCw, Trophy, ArrowUpRight, ArrowDownRight, Activity, ChevronUp, ChevronDown } from 'lucide-react'
+
+function SortHeader({ label, sortField, sortKey, sortDir, onSort }) {
+  return (
+    <th
+      style={{ padding: '1rem', fontWeight: 500, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => onSort(sortField)}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+        {label}
+        {sortKey === sortField ? (
+          sortDir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />
+        ) : (
+          <span style={{ opacity: 0.3, display: 'inline-flex' }}><ChevronDown size={13} /></span>
+        )}
+      </span>
+    </th>
+  )
+}
 
 export default function Movers({ tickers, tickerNames, onSelectTicker }) {
   const [data, setData] = useState(null)
@@ -8,6 +26,8 @@ export default function Movers({ tickers, tickerNames, onSelectTicker }) {
   const [activeTab, setActiveTab] = useState('gainers') // gainers, losers, volume
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState(null)
+  const [sortKey, setSortKey] = useState(null)
+  const [sortDir, setSortDir] = useState('desc')
 
   const fetchMovers = async () => {
     setLoading(true)
@@ -27,11 +47,29 @@ export default function Movers({ tickers, tickerNames, onSelectTicker }) {
     fetchMovers()
   }, [limit])
 
-  const currentList = data ? (
+  const baseList = data ? (
     activeTab === 'gainers' ? data.top_gainers :
     activeTab === 'losers' ? data.top_losers :
     data.top_volume
   ) : []
+
+  const currentList = sortKey
+    ? [...baseList].sort((a, b) => sortDir === 'asc' ? a[sortKey] - b[sortKey] : b[sortKey] - a[sortKey])
+    : baseList
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const switchTab = (tab) => {
+    setActiveTab(tab)
+    setSortKey(null) // back to that tab's natural order (gainers desc, losers asc, volume desc)
+  }
 
   const handleCopy = () => {
     if (!currentList.length) return
@@ -64,19 +102,19 @@ export default function Movers({ tickers, tickerNames, onSelectTicker }) {
           <div className="mode-toggle" style={{ flex: 1 }}>
             <button 
               className={`mode-btn ${activeTab === 'gainers' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('gainers')}
+              onClick={() => switchTab('gainers')}
             >
               <ArrowUpRight size={14} style={{ color: 'var(--positive)' }} /> Top Gainers
             </button>
             <button 
               className={`mode-btn ${activeTab === 'losers' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('losers')}
+              onClick={() => switchTab('losers')}
             >
               <ArrowDownRight size={14} style={{ color: 'var(--negative)' }} /> Top Losers
             </button>
             <button 
               className={`mode-btn ${activeTab === 'volume' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('volume')}
+              onClick={() => switchTab('volume')}
             >
               <Activity size={14} style={{ color: 'var(--brand-blue)' }} /> Top Volume
             </button>
@@ -118,9 +156,9 @@ export default function Movers({ tickers, tickerNames, onSelectTicker }) {
               <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                 <th style={{ padding: '1rem', fontWeight: 500 }}>Rank</th>
                 <th style={{ padding: '1rem', fontWeight: 500 }}>Ticker</th>
-                <th style={{ padding: '1rem', fontWeight: 500, textAlign: 'right' }}>Price (₹)</th>
-                <th style={{ padding: '1rem', fontWeight: 500, textAlign: 'right' }}>% Change</th>
-                <th style={{ padding: '1rem', fontWeight: 500, textAlign: 'right' }}>Volume</th>
+                <SortHeader label="Price (₹)" sortField="price" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortHeader label="% Change" sortField="change_pct" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortHeader label="Volume" sortField="volume" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               </tr>
             </thead>
             <tbody>

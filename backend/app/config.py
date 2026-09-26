@@ -14,6 +14,13 @@ class Config:
     COLLECTION_LIVE_SESSIONS = 'LiveSessions'
     COLLECTION_BACKTEST_RUNS = 'BacktestRuns'
 
+    # Logging
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_DIR = os.getenv(
+        'LOG_DIR',
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+    )
+
     # Live trading engine
     LIVE_POLL_INTERVAL_SECONDS = int(os.getenv('LIVE_POLL_INTERVAL_SECONDS', '30'))
     LIVE_IGNORE_MARKET_HOURS = os.getenv('LIVE_IGNORE_MARKET_HOURS', 'false').lower() == 'true'

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FileText, TriangleAlert, Play } from 'lucide-react'
-import { useStrategies } from '../hooks/useBacktest'
+import { useStrategies, useIntervals } from '../hooks/useBacktest'
 import PositionSizingControls from './PositionSizingControls'
 import TickerMultiSelect from './TickerMultiSelect'
 
@@ -14,8 +14,9 @@ export default function LiveSessionForm({ tickers, tickerNames, kiteConnected, o
   const [positionSizing, setPositionSizing] = useState({ mode: 'full' })
   const [confirmed, setConfirmed] = useState(false)
   const { strategies, fetchStrategies } = useStrategies()
+  const { intervals, fetchIntervals } = useIntervals()
 
-  useEffect(() => { fetchStrategies() }, [fetchStrategies])
+  useEffect(() => { fetchStrategies(); fetchIntervals() }, [fetchStrategies, fetchIntervals])
 
   const isLive = mode === 'live'
 
@@ -104,9 +105,7 @@ export default function LiveSessionForm({ tickers, tickerNames, kiteConnected, o
             required
           >
             <option value="" disabled>Select a Timeframe</option>
-            <option value="day">Daily</option>
-            <option value="5minute">5 Minute</option>
-            <option value="15minute">15 Minute</option>
+            {intervals.map((iv) => <option key={iv.id} value={iv.id}>{iv.label}</option>)}
           </select>
         </div>
 

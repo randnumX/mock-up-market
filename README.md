@@ -226,6 +226,20 @@ mock-up-market/
 | POST | `/api/scanner` | Configure/activate the scanner (body: `{active, strategy, watchlist, interval}`) |
 | GET | `/api/movers` | Top gainers/losers/volume from the most recent synced trading day |
 
+## Logs
+
+Everything the backend does is logged to a rotating file (10 MB × 5 files) **and** to stdout, so `docker compose logs` still works while a durable record survives restarts:
+
+```bash
+tail -f backend/logs/mock-up-market.log          # native
+docker compose --profile full logs -f backend    # containerized
+grep TRADE backend/logs/mock-up-market.log       # every fill, paper and live
+```
+
+At the default `LOG_LEVEL=INFO` you get: app/service startup, every live session created/stopped/deleted, every trade fill (with P&L, session id and strategy), session halts and the kill switch, one summary line per tick cycle (`ticked=/skipped_market_closed=/failed=`), backtest start/finish/interrupt, Kite connect/disconnect/sync, and MongoDB connectivity. `LOG_LEVEL=DEBUG` adds a per-session line on every tick (price count, equity, new trades).
+
+In Docker, `backend/logs/` is bind-mounted to the host, so logs persist across `up --build`. The Kite session file gets its own named volume for the same reason — otherwise each rebuild wiped the cached access token and silently dropped you back to simulated prices.
+
 ## Testing
 
 ```bash

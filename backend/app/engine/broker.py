@@ -7,16 +7,24 @@ class SimulatedBroker:
     Tracks portfolio, executes mock trades, and deducts realistic taxes.
     """
 
-    def __init__(self, initial_capital, max_capital_per_trade=None):
+    def __init__(self, initial_capital, max_capital_per_trade=None, is_intraday=False):
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.max_capital_per_trade = max_capital_per_trade
+        # Delivery (CNC) vs intraday (MIS) changes the tax treatment
+        # substantially - delivery STT is 0.1% on BOTH legs, intraday is
+        # 0.025% on the sell leg only. Strategies don't know the session's
+        # interval, so the broker carries it and every place_order defaults
+        # to it rather than silently assuming delivery.
+        self.is_intraday = is_intraday
         self.positions = {}  # symbol -> {"qty": int, "avg_price": float}
         self.history = []
         self.realized_pnl = 0
         self.total_taxes = 0
 
-    def place_order(self, order_type, symbol, price, quantity, timestamp, is_intraday=False):
+    def place_order(self, order_type, symbol, price, quantity, timestamp, is_intraday=None):
+        if is_intraday is None:
+            is_intraday = self.is_intraday
         if order_type == "BUY":
             if self.max_capital_per_trade:
                 quantity = min(quantity, int(self.max_capital_per_trade // price))

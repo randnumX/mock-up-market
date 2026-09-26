@@ -1,4 +1,4 @@
-import logging
+from app.logging_config import get_logger
 import threading
 import time
 import pandas as pd
@@ -9,8 +9,9 @@ from app.data.db import get_db
 from app.data.kite_client import get_kite
 from app.live.ticker import get_latest_price, subscribe_symbols
 from app.engine.registry import STRATEGIES
+from app.utils.intervals import FREQ_MAP
 
-logger = logging.getLogger("scanner")
+logger = get_logger("live.scanner")
 
 # Global scanner state
 # {
@@ -21,7 +22,7 @@ logger = logging.getLogger("scanner")
 # }
 SCANNER_STATE = {
     "active": False,
-    "strategy": "MACDStrategy",
+    "strategy": "macd",
     "interval": "day",
     "watchlist": [],
     "signals": {}
@@ -43,7 +44,10 @@ class DummyBroker:
             del self.positions[symbol]
 
 
-def _init_bars_for_ticker(db, ticker, interval="day", num_bars=50):
+# 50 was one bar short of what SMA crossover needs (it returns until
+# i > slow_period=50), so that strategy could never produce a scanner
+# signal at all. 120 clears every strategy's lookback with headroom.
+def _init_bars_for_ticker(db, ticker, interval="day", num_bars=120):
     """Fetch the most recent bars from Mongo to 'warm up' the indicators."""
     collection = db[Config.COLLECTION_HISTORICAL]
     query = {"scripName": ticker}
@@ -92,7 +96,10 @@ def _run_scanner_tick():
     subscribe_symbols(watchlist)
 
     new_signals = {}
-    timestamp = pd.Timestamp.now("UTC").isoformat()
+    # IST, not UTC: ORB/VWAP parse HH:MM out of this and compare against
+    # literal NSE session times ("09:30", "15:15") - see engine.py's
+    # identical fix for the full explanation.
+    timestamp = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
 
     interval = SCANNER_STATE.get("interval", "day")
     
@@ -129,9 +136,7 @@ def _run_scanner_tick():
         df = pd.DataFrame(bars)
         
         if interval != "day" and not df.empty:
-            # pandas dropped the "T" minute alias in favor of "min".
-            freq_map = {"minute": "1min", "3minute": "3min", "5minute": "5min", "10minute": "10min", "15minute": "15min", "30minute": "30min", "60minute": "60min"}
-            freq = freq_map.get(interval)
+            freq = FREQ_MAP.get(interval)
             if freq:
                 if "Open" not in df.columns: df["Open"] = df["Value"]
                 if "High" not in df.columns: df["High"] = df["Value"]
@@ -150,7 +155,7 @@ def _run_scanner_tick():
                     "High": "max",
                     "Low": "min"
                 }).dropna().reset_index()
-                df["priceDate"] = df["priceDate"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                df["priceDate"] = df["priceDate"].dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S")
 
         broker = DummyBroker()
         

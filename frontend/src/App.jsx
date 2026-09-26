@@ -20,10 +20,10 @@ export default function App() {
   const [selectedTicker, setSelectedTicker] = useState(null)
   const [selectedResultIndex, setSelectedResultIndex] = useState(null)
   const [drilldownTicker, setDrilldownTicker] = useState('ALL')
-  const [selectedRunIds, setSelectedRunIds] = useState(() => new Set())
   const { resultsList, loading, progress, error, runBacktest, deleteResult, deleteResults, clearArchivedResults } = useBacktest()
   const { tickers, tickerNames, fetchTickers } = useTickers()
   const { health, fetchHealth } = useHealth()
+  const [selectedRunIds, setSelectedRunIds] = useState(new Set())
 
   const refreshAfterSync = () => {
     fetchHealth()

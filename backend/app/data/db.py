@@ -1,6 +1,9 @@
 import time
 import pymongo
 from app.config import Config
+from app.logging_config import get_logger
+
+logger = get_logger("data.db")
 
 _client = None
 _db = None
@@ -32,10 +35,10 @@ def get_db():
         _client.admin.command('ping')
         _db = _client[Config.DB_NAME]
         _last_failed_at = None
-        print("✅ Connected to MongoDB")
+        logger.info("Connected to MongoDB (%s)", Config.DB_NAME)
         return _db
     except Exception as e:
-        print(f"⚠️  MongoDB unavailable ({e}). Using generated dummy data.")
+        logger.warning("MongoDB unavailable (%s) - falling back to generated data", e)
         _client = None
         _db = None
         _last_failed_at = time.time()
